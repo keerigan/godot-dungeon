@@ -23,7 +23,7 @@ jobs:
     name: Export Android (debug)
     runs-on: ubuntu-latest
     container:
-      image: barichello/godot-ci:4.3.0
+      image: barichello/godot-ci:4.3
     steps:
       - name: Récupérer le code
         uses: actions/checkout@v4
