@@ -33,6 +33,7 @@ var best_score := 0
 # Éclairage / ambiance
 var _light_tex: GradientTexture2D
 var _player_light: PointLight2D
+var _exit_arrow: ExitArrow
 var _torches: Array[PointLight2D] = []
 var _torch_phase: Array = []
 var _decor: Array[Node] = []      # particules d'ambiance à libérer entre niveaux
@@ -101,6 +102,7 @@ func start_game() -> void:
 	hud_root.visible = true
 	state = State.PLAYING
 	joystick.set_process_input(true)
+	_exit_arrow.enabled = true
 	level = 1
 	player.coins = 0
 	player.visible = true
@@ -160,6 +162,7 @@ func build_level() -> void:
 func _open_exit() -> void:
 	if portal != null:
 		portal.activate()
+	_exit_arrow.active = true
 	Sfx.play(Sfx.door)
 	_flash("Sortie ouverte !")
 
@@ -177,6 +180,7 @@ func _on_player_died() -> void:
 	state = State.DEAD
 	add_shake(16.0)
 	hud_root.visible = false
+	_exit_arrow.enabled = false
 	joystick.set_process_input(false)
 	joystick.output = Vector2.ZERO
 	for e in enemies:
@@ -403,6 +407,8 @@ func _spawn_portal(cell: Vector2i) -> void:
 	portal.position = _cell_to_world(cell.x, cell.y)
 	portal.entered.connect(_on_portal_entered)
 	add_child(portal)
+	_exit_arrow.target = portal
+	_exit_arrow.active = false
 
 
 func _spawn_enemy(cell: Vector2i) -> void:
@@ -434,6 +440,9 @@ func _create_player() -> void:
 	_player_light.color = Color(1.0, 0.92, 0.72)
 	_player_light.energy = 1.15
 	player.add_child(_player_light)
+
+	_exit_arrow = ExitArrow.new()
+	player.add_child(_exit_arrow)
 
 	camera = Camera2D.new()
 	camera.limit_left = 0
