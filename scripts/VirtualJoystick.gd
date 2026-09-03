@@ -10,6 +10,9 @@ var output := Vector2.ZERO
 
 const MAX_RADIUS := 110.0
 const DEAD_ZONE := 0.12
+## Les appuis démarrant à droite de cette limite (coords de base, largeur 720)
+## sont ignorés : cette zone est réservée au bouton d'attaque.
+const MOVE_ZONE_MAX_X := 480.0
 
 var _active := false
 var _finger := -1
@@ -19,6 +22,8 @@ var _knob := Vector2.ZERO
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		if event.pressed and not _active:
+			if event.position.x > MOVE_ZONE_MAX_X:
+				return   # zone réservée au bouton d'attaque
 			_active = true
 			_finger = event.index
 			_center = event.position
@@ -28,11 +33,11 @@ func _input(event: InputEvent) -> void:
 		elif not event.pressed and event.index == _finger:
 			_reset()
 	elif event is InputEventScreenDrag and _active and event.index == _finger:
-		var off := event.position - _center
+		var off: Vector2 = event.position - _center
 		if off.length() > MAX_RADIUS:
 			off = off.normalized() * MAX_RADIUS
 		_knob = _center + off
-		var raw := off / MAX_RADIUS
+		var raw: Vector2 = off / MAX_RADIUS
 		output = raw if raw.length() > DEAD_ZONE else Vector2.ZERO
 		queue_redraw()
 

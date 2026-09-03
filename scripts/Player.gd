@@ -7,15 +7,22 @@ extends CharacterBody2D
 signal died
 signal health_changed(current: int, maximum: int)
 signal coins_changed(count: int)
+signal attacked                          ## Émis quand le héros donne un coup
 
 const SPEED := 260.0
 const RADIUS := 22.0
+const ATTACK_RADIUS := 78.0              ## Portée du coup
+const ATTACK_COOLDOWN := 0.40            ## Délai entre deux coups
+const ATTACK_ANIM := 0.18                ## Durée de l'effet visuel du coup
 
 var max_health := 5
 var health := 5
 var coins := 0
 var invuln := 0.0                       ## Temps d'invincibilité restant (secondes)
 var joystick_vector := Vector2.ZERO      ## Rempli par le joystick tactile
+var facing := Vector2.RIGHT              ## Dernière direction de déplacement
+var attack_cd := 0.0                     ## Recharge restante du coup
+var attack_anim := 0.0                   ## Temps restant de l'effet visuel
 
 func _ready() -> void:
 	collision_layer = 2   # Le joueur est sur la "couche 2"
@@ -40,20 +47,38 @@ func _physics_process(delta: float) -> void:
 	var dir := joystick_vector + kb
 	if dir.length() > 1.0:
 		dir = dir.normalized()
+	if dir.length() > 0.1:
+		facing = dir.normalized()
 	velocity = dir * SPEED
 	move_and_slide()
 
+	# Attaque au clavier (Espace) — la recharge empêche le spam
+	if Input.is_physical_key_pressed(KEY_SPACE):
+		try_attack()
+
 	if invuln > 0.0:
 		invuln -= delta
+	if attack_cd > 0.0:
+		attack_cd -= delta
+	if attack_anim > 0.0:
+		attack_anim -= delta
 	# Toujours redessiner : garantit le retour à l'état normal après le
-	# clignotement d'invincibilité.
+	# clignotement d'invincibilité / l'effet de coup.
 	queue_redraw()
+
+func try_attack() -> void:
+	if attack_cd > 0.0:
+		return
+	attack_cd = ATTACK_COOLDOWN
+	attack_anim = ATTACK_ANIM
+	attacked.emit()
 
 func take_damage(amount: int) -> void:
 	if invuln > 0.0:
 		return
 	health = max(0, health - amount)
 	invuln = 1.0
+	Sfx.play(Sfx.hurt)
 	health_changed.emit(health, max_health)
 	queue_redraw()
 	if health <= 0:
@@ -66,12 +91,22 @@ func add_coin() -> void:
 func reset() -> void:
 	health = max_health
 	invuln = 0.0
+	attack_cd = 0.0
+	attack_anim = 0.0
 	joystick_vector = Vector2.ZERO
 	velocity = Vector2.ZERO
 	health_changed.emit(health, max_health)
 	queue_redraw()
 
 func _draw() -> void:
+	# Effet de coup : arc lumineux devant le héros
+	if attack_anim > 0.0:
+		var progress := 1.0 - attack_anim / ATTACK_ANIM
+		var ang := facing.angle()
+		var reach := lerpf(RADIUS, ATTACK_RADIUS, progress)
+		draw_arc(Vector2.ZERO, reach, ang - 0.9, ang + 0.9, 20,
+			Color(1.0, 1.0, 1.0, 1.0 - progress), 6.0)
+
 	# Clignotement pendant l'invincibilité
 	if invuln > 0.0 and int(invuln * 12.0) % 2 == 0:
 		return

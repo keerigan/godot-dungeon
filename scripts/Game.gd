@@ -110,11 +110,13 @@ func build_level() -> void:
 
 
 func _on_level_cleared() -> void:
+	Sfx.play(Sfx.level_up)
 	level += 1
 	build_level()
 
 
 func _on_player_died() -> void:
+	Sfx.play(Sfx.game_over)
 	state = State.DEAD
 	joystick.set_process_input(false)
 	joystick.output = Vector2.ZERO
@@ -127,11 +129,34 @@ func _on_player_died() -> void:
 
 
 func _on_coin_collected() -> void:
+	Sfx.play(Sfx.coin)
 	player.add_coin()
 	coins_left -= 1
 	_update_hud()
 	if coins_left <= 0:
 		_on_level_cleared()
+
+
+func _on_player_attacked() -> void:
+	if state != State.PLAYING:
+		return
+	Sfx.play(Sfx.attack)
+	var reach := Player.ATTACK_RADIUS + Enemy.RADIUS
+	var survivors: Array[Enemy] = []
+	var killed := 0
+	for e in enemies:
+		if not is_instance_valid(e):
+			continue
+		if player.global_position.distance_to(e.global_position) <= reach:
+			e.queue_free()
+			killed += 1
+		else:
+			survivors.append(e)
+	enemies = survivors
+	if killed > 0:
+		Sfx.play(Sfx.enemy_die)
+		player.coins += killed          # bonus de score
+		player.coins_changed.emit(player.coins)
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +243,7 @@ func _spawn_enemy(cell: Vector2i) -> void:
 func _create_player() -> void:
 	player = Player.new()
 	player.died.connect(_on_player_died)
+	player.attacked.connect(_on_player_attacked)
 	player.health_changed.connect(func(_c, _m): _update_hud())
 	player.coins_changed.connect(func(_c): _update_hud())
 	add_child(player)
@@ -287,7 +313,23 @@ func _build_ui() -> void:
 	joystick = VirtualJoystick.new()
 	ui_layer.add_child(joystick)
 
+	# Bouton d'attaque (en bas à droite, hors de la zone du joystick)
+	var attack_btn := Button.new()
+	attack_btn.text = "ATK"
+	attack_btn.add_theme_font_size_override("font_size", 40)
+	attack_btn.size = Vector2(150, 150)
+	attack_btn.position = Vector2(540, 1070)
+	attack_btn.focus_mode = Control.FOCUS_NONE
+	attack_btn.modulate = Color(1, 1, 1, 0.88)
+	attack_btn.pressed.connect(_on_attack_button)
+	ui_layer.add_child(attack_btn)
+
 	_build_gameover_ui()
+
+
+func _on_attack_button() -> void:
+	if state == State.PLAYING:
+		player.try_attack()
 
 
 func _make_label(text: String, align: int) -> Label:

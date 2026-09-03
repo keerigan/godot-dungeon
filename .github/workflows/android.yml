@@ -1,0 +1,85 @@
+name: Build Android APK
+
+# Compile un APK Android à chaque push sur main, et à la demande.
+# L'APK est publié :
+#   - en artefact du run (onglet Actions)
+#   - en asset de la release "latest" (lien direct, pratique sur mobile)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GODOT_VERSION: "4.3"
+  EXPORT_PRESET: "Android"
+  APK_NAME: "godot-dungeon.apk"
+
+jobs:
+  build:
+    name: Export Android (debug)
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3.0
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Vérifier les templates d'export
+        run: |
+          set -eux
+          mkdir -p ~/.local/share/godot/export_templates/
+          # L'image fournit déjà les templates ; on s'assure qu'ils sont visibles
+          if [ -d /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ] \
+             && [ ! -d ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable ]; then
+            cp -r /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable \
+                  ~/.local/share/godot/export_templates/
+          fi
+          ls -la ~/.local/share/godot/export_templates/ || true
+
+      - name: Générer un keystore de debug
+        run: |
+          set -eux
+          keytool -keyalg RSA -genkeypair -alias androiddebugkey \
+            -keystore "$PWD/debug.keystore" -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -deststoretype pkcs12
+
+      - name: Importer le projet (génère les ressources)
+        run: |
+          set -eux
+          godot --headless --path . --editor --quit-after 400 2>&1 | tail -n 40 || true
+
+      - name: Exporter l'APK
+        env:
+          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ github.workspace }}/debug.keystore
+          GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+        run: |
+          set -eux
+          mkdir -p build
+          godot --headless --path . --export-debug "$EXPORT_PRESET" "build/$APK_NAME"
+          ls -la build/
+          test -f "build/$APK_NAME"
+
+      - name: Publier l'artefact du run
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-dungeon-apk
+          path: build/${{ env.APK_NAME }}
+          if-no-files-found: error
+
+      - name: Publier dans la release "latest"
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Dernier APK (debug)"
+          body: "APK de debug compilé automatiquement depuis la branche main."
+          files: build/${{ env.APK_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

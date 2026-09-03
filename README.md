@@ -13,14 +13,35 @@ tout en évitant des ennemis qui te poursuivent.
 ## 🎮 Le jeu
 
 - Déplace le héros et **ramasse toutes les pièces** du niveau.
+- **Attaque** les ennemis pour les éliminer (bonus de score).
 - Chaque niveau franchi ajoute des ennemis plus rapides et plus de murs.
 - Toucher un ennemi retire **1 point de vie** (bref temps d'invincibilité).
 - À 0 point de vie → **Game Over**, puis bouton **Rejouer**.
+- **Sons** générés par synthèse (pièce, coup, dégât, mort, niveau, game over).
 
 ### Contrôles
-- **Android / tactile** : joystick flottant — pose ton doigt n'importe où et
-  glisse pour te diriger.
-- **PC (test dans l'éditeur)** : **ZQSD / WASD** ou les **flèches**.
+- **Android / tactile** : joystick flottant à **gauche** (pose le doigt et
+  glisse) + bouton **ATK** en bas à droite pour attaquer.
+- **PC (test dans l'éditeur)** : **ZQSD / WASD** ou **flèches** pour bouger,
+  **Espace** pour attaquer.
+
+---
+
+## ⬇️ Récupérer l'APK sans PC (depuis mobile)
+
+Un **workflow GitHub Actions** (`.github/workflows/android.yml`) compile l'APK
+automatiquement à chaque push sur `main`. Pour l'installer sur ton téléphone :
+
+1. Ouvre l'onglet **Releases** du dépôt → release **« latest »**.
+2. Télécharge `godot-dungeon.apk`.
+3. Autorise l'installation depuis cette source, puis ouvre le fichier.
+
+> Tu peux aussi lancer le build à la main : onglet **Actions** →
+> *Build Android APK* → **Run workflow**. L'APK est aussi disponible en
+> **artefact** du run.
+>
+> ⚠️ C'est un APK **de debug** (non signé pour le Play Store) : parfait pour
+> jouer et tester, pas pour une publication officielle.
 
 ---
 
