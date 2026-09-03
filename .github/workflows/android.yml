@@ -32,7 +32,6 @@ jobs:
         run: |
           set -eux
           mkdir -p ~/.local/share/godot/export_templates/
-          # L'image fournit déjà les templates ; on s'assure qu'ils sont visibles
           if [ -d /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ] \
              && [ ! -d ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable ]; then
             cp -r /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable \
@@ -49,10 +48,36 @@ jobs:
             -dname "CN=Android Debug,O=Android,C=US" \
             -deststoretype pkcs12
 
-      - name: Importer le projet (génère les ressources)
+      - name: Importer le projet (génère les ressources et les EditorSettings)
         run: |
           set -eux
           godot --headless --path . --editor --quit-after 400 2>&1 | tail -n 40 || true
+
+      - name: Renseigner les chemins JDK / SDK Android dans les EditorSettings
+        run: |
+          set -eux
+          echo "HOME=$HOME"
+          SETTINGS="$HOME/.config/godot/editor_settings-${GODOT_VERSION}.tres"
+          if [ ! -f "$SETTINGS" ]; then
+            SETTINGS=$(find / -name "editor_settings-${GODOT_VERSION}.tres" 2>/dev/null | head -n1)
+          fi
+          echo "settings=$SETTINGS"
+          test -n "$SETTINGS"
+          JAVA_DIR="${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(command -v keytool)")")")}"
+          SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          echo "JAVA_DIR=$JAVA_DIR  SDK_DIR=$SDK_DIR"
+          set_key() {
+            if grep -q "^$1 = " "$SETTINGS"; then
+              sed -i "s#^$1 = .*#$1 = \"$2\"#" "$SETTINGS"
+            else
+              sed -i "/^\[resource\]/a $1 = \"$2\"" "$SETTINGS"
+            fi
+          }
+          set_key "export/android/java_sdk_path" "$JAVA_DIR"
+          if [ -n "$SDK_DIR" ]; then
+            set_key "export/android/android_sdk_path" "$SDK_DIR"
+          fi
+          grep -n 'export/android/\(java_sdk_path\|android_sdk_path\)' "$SETTINGS"
 
       - name: Exporter l'APK
         env:
