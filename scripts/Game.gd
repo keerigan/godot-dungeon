@@ -15,6 +15,60 @@ const SAVE_PATH := "user://dungeon.cfg"
 
 enum State { TITLE, PLAYING, DEAD }
 
+## Thèmes visuels (100% code). Chaque palette reskin le donjon.
+const PALETTES: Array = [
+	{
+		"name": "Néon",
+		"ambient": Color(0.34, 0.32, 0.44),
+		"floor_a": Color(0.115, 0.115, 0.15), "floor_b": Color(0.135, 0.135, 0.175),
+		"wall_face": Color(0.21, 0.19, 0.27), "wall_top": Color(0.32, 0.29, 0.40),
+		"wall_left": Color(0.28, 0.25, 0.35), "wall_bot": Color(0.10, 0.09, 0.13),
+		"wall_right": Color(0.12, 0.10, 0.15), "seam": Color(0.09, 0.08, 0.11),
+		"crack": Color(0.07, 0.07, 0.10),
+		"torch": Color(1.0, 0.72, 0.40), "plight": Color(1.0, 0.92, 0.72),
+	},
+	{
+		"name": "Lave",
+		"ambient": Color(0.44, 0.27, 0.22),
+		"floor_a": Color(0.15, 0.09, 0.09), "floor_b": Color(0.18, 0.10, 0.09),
+		"wall_face": Color(0.28, 0.14, 0.12), "wall_top": Color(0.44, 0.22, 0.16),
+		"wall_left": Color(0.36, 0.18, 0.14), "wall_bot": Color(0.12, 0.06, 0.05),
+		"wall_right": Color(0.14, 0.07, 0.06), "seam": Color(0.10, 0.05, 0.04),
+		"crack": Color(0.75, 0.32, 0.10),
+		"torch": Color(1.0, 0.5, 0.2), "plight": Color(1.0, 0.82, 0.5),
+	},
+	{
+		"name": "Glacier",
+		"ambient": Color(0.28, 0.34, 0.48),
+		"floor_a": Color(0.11, 0.14, 0.19), "floor_b": Color(0.13, 0.16, 0.22),
+		"wall_face": Color(0.17, 0.22, 0.32), "wall_top": Color(0.30, 0.40, 0.52),
+		"wall_left": Color(0.24, 0.31, 0.42), "wall_bot": Color(0.08, 0.11, 0.16),
+		"wall_right": Color(0.10, 0.13, 0.18), "seam": Color(0.07, 0.09, 0.13),
+		"crack": Color(0.5, 0.7, 0.92),
+		"torch": Color(0.6, 0.85, 1.0), "plight": Color(0.82, 0.92, 1.0),
+	},
+	{
+		"name": "Forêt",
+		"ambient": Color(0.28, 0.40, 0.30),
+		"floor_a": Color(0.10, 0.14, 0.11), "floor_b": Color(0.12, 0.16, 0.12),
+		"wall_face": Color(0.16, 0.24, 0.17), "wall_top": Color(0.28, 0.42, 0.28),
+		"wall_left": Color(0.22, 0.33, 0.22), "wall_bot": Color(0.07, 0.11, 0.08),
+		"wall_right": Color(0.09, 0.13, 0.09), "seam": Color(0.06, 0.10, 0.07),
+		"crack": Color(0.30, 0.50, 0.22),
+		"torch": Color(0.7, 1.0, 0.5), "plight": Color(0.85, 1.0, 0.72),
+	},
+	{
+		"name": "Rétro",
+		"ambient": Color(0.55, 0.66, 0.36),
+		"floor_a": Color(0.18, 0.22, 0.12), "floor_b": Color(0.22, 0.27, 0.14),
+		"wall_face": Color(0.30, 0.37, 0.18), "wall_top": Color(0.45, 0.55, 0.28),
+		"wall_left": Color(0.38, 0.47, 0.23), "wall_bot": Color(0.14, 0.18, 0.09),
+		"wall_right": Color(0.16, 0.20, 0.10), "seam": Color(0.10, 0.13, 0.06),
+		"crack": Color(0.25, 0.30, 0.15),
+		"torch": Color(0.75, 0.9, 0.4), "plight": Color(0.82, 0.95, 0.5),
+	},
+]
+
 var walls: Array = []
 var wall_bodies: Array[StaticBody2D] = []
 var enemies: Array[Enemy] = []
@@ -31,11 +85,26 @@ var coins_left := 0
 var coins_on_level := 0
 var best_score := 0
 var vibration_enabled := true
+var theme_idx := 0
 
 # Éclairage / ambiance
 var _light_tex: GradientTexture2D
 var _player_light: PointLight2D
 var _exit_arrow: ExitArrow
+var _ambient: CanvasModulate
+# Couleurs du thème courant (dépaquetées depuis PALETTES)
+var _c_ambient: Color
+var _c_floor_a: Color
+var _c_floor_b: Color
+var _c_wall_face: Color
+var _c_wall_top: Color
+var _c_wall_left: Color
+var _c_wall_bot: Color
+var _c_wall_right: Color
+var _c_seam: Color
+var _c_crack: Color
+var _c_torch: Color
+var _c_plight: Color
 var _torches: Array[PointLight2D] = []
 var _torch_phase: Array = []
 var _decor: Array[Node] = []      # particules d'ambiance à libérer entre niveaux
@@ -54,6 +123,7 @@ var flash_label: Label
 var title_root: Control
 var title_best: Label
 var vib_btn: Button
+var theme_btn: Button
 var gameover_root: Control
 var gameover_score: Label
 
@@ -61,11 +131,12 @@ var gameover_score: Label
 func _ready() -> void:
 	randomize()
 	_load_prefs()
+	_unpack_theme()
 	_light_tex = FX.make_light_texture(256)
 
-	var ambient := CanvasModulate.new()
-	ambient.color = Color(0.34, 0.32, 0.44)   # obscurité de base du donjon
-	add_child(ambient)
+	_ambient = CanvasModulate.new()
+	_ambient.color = _c_ambient   # obscurité de base du donjon (selon thème)
+	add_child(_ambient)
 
 	_build_ui()
 	_create_player()
@@ -367,13 +438,13 @@ func _place_torches() -> void:
 		var lt := PointLight2D.new()
 		lt.texture = _light_tex
 		lt.texture_scale = 1.7
-		lt.color = Color(1.0, 0.72, 0.40)
+		lt.color = _c_torch
 		lt.energy = 0.9
 		lt.position = pos
 		add_child(lt)
 		_torches.append(lt)
 		_torch_phase.append(randf() * TAU)
-		# Braises
+		# Braises (teintées comme la torche)
 		var em := CPUParticles2D.new()
 		em.position = pos
 		em.amount = 10
@@ -386,7 +457,7 @@ func _place_torches() -> void:
 		em.initial_velocity_max = 22.0
 		em.scale_amount_min = 1.5
 		em.scale_amount_max = 3.0
-		em.color = Color(1.0, 0.7, 0.35, 0.85)
+		em.color = Color(_c_torch.r, _c_torch.g, _c_torch.b, 0.85)
 		add_child(em)
 		_decor.append(em)
 
@@ -498,7 +569,7 @@ func _create_player() -> void:
 	_player_light = PointLight2D.new()
 	_player_light.texture = _light_tex
 	_player_light.texture_scale = 3.3
-	_player_light.color = Color(1.0, 0.92, 0.72)
+	_player_light.color = _c_plight
 	_player_light.energy = 1.15
 	player.add_child(_player_light)
 
@@ -590,16 +661,16 @@ func _draw_floor(x: int, y: int) -> void:
 	var r := Rect2(x * TILE, y * TILE, TILE, TILE)
 	var n := _hash01(x, y)
 	# Damier de pierre légèrement varié
-	var base := Color(0.115, 0.115, 0.15) if (x + y) % 2 == 0 else Color(0.135, 0.135, 0.175)
+	var base := _c_floor_a if (x + y) % 2 == 0 else _c_floor_b
 	base = base.lightened(n * 0.05)
 	draw_rect(r, base)
 	# Joints (rainures) sombres
-	draw_rect(r, Color(0.06, 0.06, 0.085), false, 1.0)
+	draw_rect(r, _c_seam, false, 1.0)
 	# Fissure verticale occasionnelle (rare, en zigzag)
 	if _hash01(x * 3 + 1, y * 7 + 2) > 0.93:
 		var sx := r.position.x + TILE * (0.35 + n * 0.3)
 		var top := r.position.y + TILE * 0.16
-		var col := Color(0.07, 0.07, 0.1)
+		var col := _c_crack
 		draw_polyline(PackedVector2Array([
 			Vector2(sx, top),
 			Vector2(sx + 4.0, top + TILE * 0.28),
@@ -614,15 +685,15 @@ func _draw_wall(x: int, y: int) -> void:
 	var r := Rect2(px, py, TILE, TILE)
 	var n := _hash01(x, y)
 	# Face du bloc
-	draw_rect(r, Color(0.21, 0.19, 0.27).lightened(n * 0.05))
+	draw_rect(r, _c_wall_face.lightened(n * 0.05))
 	# Biseau clair (haut + gauche) et ombre (bas + droite) => relief
-	draw_rect(Rect2(px, py, TILE, 6), Color(0.32, 0.29, 0.40))
-	draw_rect(Rect2(px, py, 6, TILE), Color(0.28, 0.25, 0.35))
-	draw_rect(Rect2(px, py + TILE - 6, TILE, 6), Color(0.10, 0.09, 0.13))
-	draw_rect(Rect2(px + TILE - 6, py, 6, TILE), Color(0.12, 0.10, 0.15))
+	draw_rect(Rect2(px, py, TILE, 6), _c_wall_top)
+	draw_rect(Rect2(px, py, 6, TILE), _c_wall_left)
+	draw_rect(Rect2(px, py + TILE - 6, TILE, 6), _c_wall_bot)
+	draw_rect(Rect2(px + TILE - 6, py, 6, TILE), _c_wall_right)
 	# Joint de briques au milieu
 	draw_line(Vector2(px + 6, py + TILE * 0.5), Vector2(px + TILE - 6, py + TILE * 0.5),
-		Color(0.09, 0.08, 0.11), 2.0)
+		_c_seam, 2.0)
 
 
 # ---------------------------------------------------------------------------
@@ -796,10 +867,18 @@ func _build_title_ui() -> void:
 	hint.add_theme_color_override("font_color", Color(0.7, 0.7, 0.75))
 	box.add_child(hint)
 
+	theme_btn = Button.new()
+	theme_btn.text = _theme_label()
+	theme_btn.add_theme_font_size_override("font_size", 24)
+	theme_btn.custom_minimum_size = Vector2(300, 58)
+	theme_btn.focus_mode = Control.FOCUS_NONE
+	theme_btn.pressed.connect(_cycle_theme)
+	box.add_child(theme_btn)
+
 	vib_btn = Button.new()
 	vib_btn.text = _vib_label()
 	vib_btn.add_theme_font_size_override("font_size", 24)
-	vib_btn.custom_minimum_size = Vector2(260, 58)
+	vib_btn.custom_minimum_size = Vector2(300, 58)
 	vib_btn.focus_mode = Control.FOCUS_NONE
 	vib_btn.pressed.connect(_toggle_vibration)
 	box.add_child(vib_btn)
@@ -880,14 +959,58 @@ func _load_prefs() -> void:
 	if cfg.load(SAVE_PATH) == OK:
 		best_score = int(cfg.get_value("score", "best", 0))
 		vibration_enabled = bool(cfg.get_value("options", "vibration", true))
+		theme_idx = clampi(int(cfg.get_value("options", "theme", 0)), 0, PALETTES.size() - 1)
 
 
 func _save_prefs() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("score", "best", best_score)
 	cfg.set_value("options", "vibration", vibration_enabled)
+	cfg.set_value("options", "theme", theme_idx)
 	cfg.save(SAVE_PATH)
 	_refresh_best_labels()
+
+
+## Copie la palette courante dans les variables de couleur (rapide pour _draw).
+func _unpack_theme() -> void:
+	var p: Dictionary = PALETTES[theme_idx]
+	_c_ambient = p["ambient"]
+	_c_floor_a = p["floor_a"]
+	_c_floor_b = p["floor_b"]
+	_c_wall_face = p["wall_face"]
+	_c_wall_top = p["wall_top"]
+	_c_wall_left = p["wall_left"]
+	_c_wall_bot = p["wall_bot"]
+	_c_wall_right = p["wall_right"]
+	_c_seam = p["seam"]
+	_c_crack = p["crack"]
+	_c_torch = p["torch"]
+	_c_plight = p["plight"]
+
+
+## Applique le thème aux éléments déjà existants (aperçu immédiat).
+func _apply_theme() -> void:
+	_unpack_theme()
+	if _ambient != null:
+		_ambient.color = _c_ambient
+	if _player_light != null:
+		_player_light.color = _c_plight
+	for lt in _torches:
+		if is_instance_valid(lt):
+			lt.color = _c_torch
+	queue_redraw()
+
+
+func _cycle_theme() -> void:
+	theme_idx = (theme_idx + 1) % PALETTES.size()
+	_apply_theme()
+	_save_prefs()
+	if theme_btn != null:
+		theme_btn.text = _theme_label()
+
+
+func _theme_label() -> String:
+	return "Thème : %s  »" % PALETTES[theme_idx]["name"]
 
 
 func _vibrate(ms: int) -> void:
