@@ -41,6 +41,7 @@ var _shake := 0.0
 
 # Interface
 var ui_layer: CanvasLayer
+var hud_root: Control
 var joystick: VirtualJoystick
 var level_label: Label
 var coins_label: Label
@@ -68,8 +69,10 @@ func _ready() -> void:
 
 	state = State.TITLE
 	player.visible = false
+	joystick.set_process_input(false)
 	build_level()
 	title_root.visible = true
+	hud_root.visible = false
 
 
 func _process(delta: float) -> void:
@@ -95,6 +98,7 @@ func _process(delta: float) -> void:
 func start_game() -> void:
 	title_root.visible = false
 	gameover_root.visible = false
+	hud_root.visible = true
 	state = State.PLAYING
 	joystick.set_process_input(true)
 	level = 1
@@ -172,6 +176,7 @@ func _on_player_died() -> void:
 	Sfx.play(Sfx.game_over)
 	state = State.DEAD
 	add_shake(16.0)
+	hud_root.visible = false
 	joystick.set_process_input(false)
 	joystick.output = Vector2.ZERO
 	for e in enemies:
@@ -519,11 +524,19 @@ func _build_ui() -> void:
 	ui_layer.layer = 5
 	add_child(ui_layer)
 
+	# Tout le HUD de jeu est regroupé pour être masqué hors des parties
+	hud_root = Control.new()
+	hud_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud_root.visible = false
+	ui_layer.add_child(hud_root)
+
 	var bar := ColorRect.new()
 	bar.color = Color(0, 0, 0, 0.32)
 	bar.position = Vector2.ZERO
 	bar.size = Vector2(720, 120)
-	ui_layer.add_child(bar)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud_root.add_child(bar)
 
 	level_label = _make_label("Niveau 1", HORIZONTAL_ALIGNMENT_LEFT)
 	coins_label = _make_label("0 / 0 pièces", HORIZONTAL_ALIGNMENT_CENTER)
@@ -531,7 +544,7 @@ func _build_ui() -> void:
 
 	hearts = HeartsBar.new()
 	hearts.position = Vector2(34, 84)
-	ui_layer.add_child(hearts)
+	hud_root.add_child(hearts)
 
 	flash_label = Label.new()
 	flash_label.add_theme_font_size_override("font_size", 54)
@@ -539,10 +552,10 @@ func _build_ui() -> void:
 	flash_label.size = Vector2(720, 80)
 	flash_label.position = Vector2(0, 360)
 	flash_label.visible = false
-	ui_layer.add_child(flash_label)
+	hud_root.add_child(flash_label)
 
 	joystick = VirtualJoystick.new()
-	ui_layer.add_child(joystick)
+	hud_root.add_child(joystick)
 
 	var attack_btn := Button.new()
 	attack_btn.text = "ATK"
@@ -552,7 +565,7 @@ func _build_ui() -> void:
 	attack_btn.focus_mode = Control.FOCUS_NONE
 	attack_btn.modulate = Color(1, 1, 1, 0.88)
 	attack_btn.pressed.connect(_on_attack_button)
-	ui_layer.add_child(attack_btn)
+	hud_root.add_child(attack_btn)
 
 	_build_title_ui()
 	_build_gameover_ui()
@@ -592,7 +605,8 @@ func _make_label(text: String, align: int) -> Label:
 	l.add_theme_font_size_override("font_size", 28)
 	l.size = Vector2(680, 44)
 	l.position = Vector2(20, 14)
-	ui_layer.add_child(l)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud_root.add_child(l)
 	return l
 
 
