@@ -1,0 +1,19 @@
+# Dossier généré par l'éditeur Godot 4
+.godot/
+
+# Cache d'import et logs
+*.translation
+.import/
+logs/
+
+# Sorties de build Android / exports
+build/
+android/build/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Divers OS / éditeurs
+.DS_Store
+Thumbs.db
