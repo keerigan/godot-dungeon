@@ -20,6 +20,7 @@ var wall_bodies: Array[StaticBody2D] = []
 var enemies: Array[Enemy] = []
 var coins: Array[Coin] = []
 var powerups: Array[Powerup] = []
+var traps: Array[Trap] = []
 var portal: Portal
 
 var player: Player
@@ -29,6 +30,7 @@ var level := 1
 var coins_left := 0
 var coins_on_level := 0
 var best_score := 0
+var vibration_enabled := true
 
 # Éclairage / ambiance
 var _light_tex: GradientTexture2D
@@ -51,13 +53,14 @@ var hearts: HeartsBar
 var flash_label: Label
 var title_root: Control
 var title_best: Label
+var vib_btn: Button
 var gameover_root: Control
 var gameover_score: Label
 
 
 func _ready() -> void:
 	randomize()
-	_load_best()
+	_load_prefs()
 	_light_tex = FX.make_light_texture(256)
 
 	var ambient := CanvasModulate.new()
@@ -87,8 +90,21 @@ func _process(delta: float) -> void:
 		if is_instance_valid(e):
 			var contact := Player.RADIUS + e.radius - 4.0
 			if player.global_position.distance_to(e.global_position) < contact:
+				var hp := player.health
 				player.take_damage(1)
-				add_shake(7.0)
+				if player.health < hp:
+					add_shake(7.0)
+					_vibrate(120)
+				break
+	for t in traps:
+		if is_instance_valid(t) and t.is_dangerous():
+			if absf(player.global_position.x - t.global_position.x) < 26.0 \
+					and absf(player.global_position.y - t.global_position.y) < 26.0:
+				var hp2 := player.health
+				player.take_damage(1)
+				if player.health < hp2:
+					add_shake(6.0)
+					_vibrate(120)
 				break
 
 
@@ -124,6 +140,15 @@ func build_level() -> void:
 
 	# Portail à la case libre la plus éloignée du départ
 	_spawn_portal(_farthest_cell(free_cells))
+
+	# Pièges (de plus en plus nombreux, jamais collés au départ)
+	var trap_count := 1 + int(level / 2)
+	for i in trap_count:
+		if free_cells.is_empty():
+			break
+		var tc: Vector2i = free_cells.pop_back()
+		if Vector2(tc).distance_to(Vector2(SPAWN_CELL)) >= 3.0:
+			_spawn_trap(tc)
 
 	# Pièces
 	coins_on_level = 6 + level
@@ -171,6 +196,7 @@ func _on_portal_entered() -> void:
 	if state != State.PLAYING or coins_left > 0:
 		return
 	Sfx.play(Sfx.level_up)
+	_vibrate(60)
 	level += 1
 	build_level()
 
@@ -186,9 +212,10 @@ func _on_player_died() -> void:
 	for e in enemies:
 		if is_instance_valid(e):
 			e.target = null
+	_vibrate(300)
 	if player.coins > best_score:
 		best_score = player.coins
-		_save_best()
+		_save_prefs()
 	gameover_score.text = "Score : %d   ·   Niveau %d\nMeilleur : %d" % [player.coins, level, best_score]
 	gameover_root.visible = true
 
@@ -205,6 +232,7 @@ func _on_coin_collected(pos: Vector2) -> void:
 
 func _on_powerup(kind: int) -> void:
 	Sfx.play(Sfx.powerup)
+	_vibrate(40)
 	if kind == Powerup.Kind.HEART:
 		player.heal(1)
 		_burst(player.global_position, Color(0.92, 0.3, 0.4), 12, 170.0, 0.5)
@@ -245,6 +273,7 @@ func _kill_enemy(e: Enemy) -> void:
 	player.coins += 2                 # bonus de score
 	player.coins_changed.emit(player.coins)
 	add_shake(4.0)
+	_vibrate(25)
 	e.queue_free()
 
 
@@ -269,6 +298,10 @@ func _clear_level() -> void:
 		if is_instance_valid(pw):
 			pw.queue_free()
 	powerups.clear()
+	for t in traps:
+		if is_instance_valid(t):
+			t.queue_free()
+	traps.clear()
 	for lt in _torches:
 		if is_instance_valid(lt):
 			lt.queue_free()
@@ -400,6 +433,13 @@ func _spawn_powerup(cell: Vector2i, kind: int) -> void:
 	pw.collected.connect(_on_powerup)
 	add_child(pw)
 	powerups.append(pw)
+
+
+func _spawn_trap(cell: Vector2i) -> void:
+	var t := Trap.new()
+	t.position = _cell_to_world(cell.x, cell.y)
+	add_child(t)
+	traps.append(t)
 
 
 func _spawn_portal(cell: Vector2i) -> void:
@@ -693,6 +733,14 @@ func _build_title_ui() -> void:
 	hint.add_theme_color_override("font_color", Color(0.7, 0.7, 0.75))
 	box.add_child(hint)
 
+	vib_btn = Button.new()
+	vib_btn.text = _vib_label()
+	vib_btn.add_theme_font_size_override("font_size", 24)
+	vib_btn.custom_minimum_size = Vector2(260, 58)
+	vib_btn.focus_mode = Control.FOCUS_NONE
+	vib_btn.pressed.connect(_toggle_vibration)
+	box.add_child(vib_btn)
+
 	_refresh_best_labels()
 
 
@@ -764,14 +812,34 @@ func _flash(text: String) -> void:
 # Sauvegarde
 # ---------------------------------------------------------------------------
 
-func _load_best() -> void:
+func _load_prefs() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SAVE_PATH) == OK:
 		best_score = int(cfg.get_value("score", "best", 0))
+		vibration_enabled = bool(cfg.get_value("options", "vibration", true))
 
 
-func _save_best() -> void:
+func _save_prefs() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("score", "best", best_score)
+	cfg.set_value("options", "vibration", vibration_enabled)
 	cfg.save(SAVE_PATH)
 	_refresh_best_labels()
+
+
+func _vibrate(ms: int) -> void:
+	if vibration_enabled:
+		Input.vibrate_handheld(ms)
+
+
+func _toggle_vibration() -> void:
+	vibration_enabled = not vibration_enabled
+	_save_prefs()
+	if vib_btn != null:
+		vib_btn.text = _vib_label()
+	if vibration_enabled:
+		Input.vibrate_handheld(60)   # petit retour tactile de confirmation
+
+
+func _vib_label() -> String:
+	return "Vibrations : %s" % ("ON" if vibration_enabled else "OFF")

@@ -16,7 +16,8 @@ var _t := 0.0
 
 func _process(delta: float) -> void:
 	_t += delta
-	var ok := enabled and target != null and is_instance_valid(target)
+	# Visible seulement quand la sortie est ouverte (active)
+	var ok := enabled and active and target != null and is_instance_valid(target)
 	visible = ok
 	if ok:
 		rotation = (target.global_position - global_position).angle()

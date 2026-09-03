@@ -20,7 +20,10 @@ tout en évitant des ennemis qui te poursuivent.
 - **Attaque** (arc lumineux) : élimine les ennemis, avec **recul**, **flash**,
   **particules**, **screen shake** et bonus de score.
 - **3 types d'ennemis** : poursuiveur, rapide, et costaud (2 PV).
+- **Pièges à pics** qui sortent par cycles (télégraphiés) : évite-les quand ils
+  sont sortis !
 - **Bonus** à ramasser : ❤️ cœur (soin) et ⚡ éclair (vitesse temporaire).
+- **Vibrations** (mobile) activables/désactivables depuis l'écran-titre.
 - **Vie en cœurs**, invincibilité brève après un coup reçu.
 - **Meilleur score sauvegardé** entre les parties.
 - **Sons + musique** générés par synthèse (aucun fichier audio).
