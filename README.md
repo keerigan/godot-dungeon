@@ -12,12 +12,19 @@ tout en évitant des ennemis qui te poursuivent.
 
 ## 🎮 Le jeu
 
-- Déplace le héros et **ramasse toutes les pièces** du niveau.
-- **Attaque** les ennemis pour les éliminer (bonus de score).
-- Chaque niveau franchi ajoute des ennemis plus rapides et plus de murs.
-- Toucher un ennemi retire **1 point de vie** (bref temps d'invincibilité).
+- **Écran-titre** animé (braises flottantes, musique d'ambiance).
+- Donjon **plongé dans le noir** avec **éclairage dynamique** : halo autour du
+  héros, **torches vacillantes** et braises, vignettage cinématographique.
+- Déplace le héros, **ramasse toutes les pièces**, puis rejoins le **portail de
+  sortie** qui s'ouvre pour passer au niveau suivant.
+- **Attaque** (arc lumineux) : élimine les ennemis, avec **recul**, **flash**,
+  **particules**, **screen shake** et bonus de score.
+- **3 types d'ennemis** : poursuiveur, rapide, et costaud (2 PV).
+- **Bonus** à ramasser : ❤️ cœur (soin) et ⚡ éclair (vitesse temporaire).
+- **Vie en cœurs**, invincibilité brève après un coup reçu.
+- **Meilleur score sauvegardé** entre les parties.
+- **Sons + musique** générés par synthèse (aucun fichier audio).
 - À 0 point de vie → **Game Over**, puis bouton **Rejouer**.
-- **Sons** générés par synthèse (pièce, coup, dégât, mort, niveau, game over).
 
 ### Contrôles
 - **Android / tactile** : joystick flottant à **gauche** (pose le doigt et

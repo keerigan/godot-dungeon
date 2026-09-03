@@ -1,73 +1,105 @@
 extends Node2D
 
-## Boucle de jeu principale : génère le donjon, place le héros, les pièces
-## et les ennemis, gère les niveaux, les dégâts et l'écran de fin.
-## Tout le rendu est fait par code (_draw) : aucun asset image nécessaire.
+## Boucle de jeu principale.
+## Donjon 2D avec éclairage dynamique, particules, écran-titre, portail de
+## sortie, bonus, plusieurs types d'ennemis et meilleur score sauvegardé.
+## Tout est dessiné / généré par code : aucun asset binaire.
 
 const TILE := 64
 const COLS := 13
 const ROWS := 21
 const MAP_W := COLS * TILE
 const MAP_H := ROWS * TILE
+const SPAWN_CELL := Vector2i(COLS / 2, ROWS / 2)
+const SAVE_PATH := "user://dungeon.cfg"
 
-enum State { PLAYING, DEAD }
+enum State { TITLE, PLAYING, DEAD }
 
-var walls: Array = []                 ## Grille de booléens [ROWS][COLS] : true = mur
+var walls: Array = []
 var wall_bodies: Array[StaticBody2D] = []
 var enemies: Array[Enemy] = []
 var coins: Array[Coin] = []
+var powerups: Array[Powerup] = []
+var portal: Portal
 
 var player: Player
 var camera: Camera2D
-var state: int = State.PLAYING
+var state: int = State.TITLE
 var level := 1
 var coins_left := 0
 var coins_on_level := 0
+var best_score := 0
 
-# --- Interface ---
+# Éclairage / ambiance
+var _light_tex: GradientTexture2D
+var _player_light: PointLight2D
+var _torches: Array[PointLight2D] = []
+var _torch_phase: Array = []
+var _decor: Array[Node] = []      # particules d'ambiance à libérer entre niveaux
+var _time := 0.0
+var _shake := 0.0
+
+# Interface
 var ui_layer: CanvasLayer
 var joystick: VirtualJoystick
 var level_label: Label
 var coins_label: Label
-var health_label: Label
-var flash_label: Label
-var gameover_root: Control
 var score_label: Label
-
-const SPAWN_CELL := Vector2i(COLS / 2, ROWS / 2)
+var hearts: HeartsBar
+var flash_label: Label
+var title_root: Control
+var title_best: Label
+var gameover_root: Control
+var gameover_score: Label
 
 
 func _ready() -> void:
 	randomize()
+	_load_best()
+	_light_tex = FX.make_light_texture(256)
+
+	var ambient := CanvasModulate.new()
+	ambient.color = Color(0.34, 0.32, 0.44)   # obscurité de base du donjon
+	add_child(ambient)
+
 	_build_ui()
 	_create_player()
-	start_new_game()
+	Sfx.play_music()
+
+	state = State.TITLE
+	player.visible = false
+	build_level()
+	title_root.visible = true
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_time += delta
+	_animate_torches()
+	_apply_shake(delta)
 	if state != State.PLAYING:
 		return
-	# Transmet la direction du joystick au joueur
 	player.joystick_vector = joystick.output
-	# Contact avec un ennemi -> dégâts
-	var hit_dist := Player.RADIUS + Enemy.RADIUS - 4.0
 	for e in enemies:
-		if is_instance_valid(e) and player.global_position.distance_to(e.global_position) < hit_dist:
-			player.take_damage(1)
-			break
+		if is_instance_valid(e):
+			var contact := Player.RADIUS + e.radius - 4.0
+			if player.global_position.distance_to(e.global_position) < contact:
+				player.take_damage(1)
+				add_shake(7.0)
+				break
 
 
 # ---------------------------------------------------------------------------
 # Cycle de jeu
 # ---------------------------------------------------------------------------
 
-func start_new_game() -> void:
+func start_game() -> void:
+	title_root.visible = false
+	gameover_root.visible = false
+	state = State.PLAYING
+	joystick.set_process_input(true)
 	level = 1
 	player.coins = 0
-	player.reset()
-	state = State.PLAYING
-	gameover_root.visible = false
-	joystick.set_process_input(true)
+	player.visible = true
 	build_level()
 
 
@@ -75,26 +107,37 @@ func build_level() -> void:
 	_clear_level()
 	_generate_walls()
 	_build_wall_bodies()
+	_place_torches()
 
-	# Place le héros au centre et le soigne complètement
 	player.global_position = _cell_to_world(SPAWN_CELL.x, SPAWN_CELL.y)
 	player.reset()
+	player.visible = (state == State.PLAYING)
 
 	var free_cells := _free_cells()
 	free_cells.shuffle()
 
-	# Pièces à ramasser
+	# Portail à la case libre la plus éloignée du départ
+	_spawn_portal(_farthest_cell(free_cells))
+
+	# Pièces
 	coins_on_level = 6 + level
 	coins_left = 0
 	for i in coins_on_level:
 		if free_cells.is_empty():
 			break
-		var c: Vector2i = free_cells.pop_back()
-		_spawn_coin(c)
+		_spawn_coin(free_cells.pop_back())
 		coins_left += 1
 	coins_on_level = coins_left
 
-	# Ennemis, placés loin du héros
+	# Bonus (0 à 2 selon la chance)
+	var bonus_count := (1 if randf() < 0.75 else 0) + (1 if randf() < 0.35 else 0)
+	for i in bonus_count:
+		if free_cells.is_empty():
+			break
+		var kind := Powerup.Kind.HEART if randf() < 0.6 else Powerup.Kind.SPEED
+		_spawn_powerup(free_cells.pop_back(), kind)
+
+	# Ennemis variés, loin du héros
 	var enemy_count := 2 + level
 	var placed := 0
 	for c in free_cells:
@@ -106,10 +149,20 @@ func build_level() -> void:
 
 	queue_redraw()
 	_update_hud()
-	_flash("Niveau %d" % level)
+	if state == State.PLAYING:
+		_flash("Niveau %d" % level)
 
 
-func _on_level_cleared() -> void:
+func _open_exit() -> void:
+	if portal != null:
+		portal.activate()
+	Sfx.play(Sfx.door)
+	_flash("Sortie ouverte !")
+
+
+func _on_portal_entered() -> void:
+	if state != State.PLAYING or coins_left > 0:
+		return
 	Sfx.play(Sfx.level_up)
 	level += 1
 	build_level()
@@ -118,45 +171,72 @@ func _on_level_cleared() -> void:
 func _on_player_died() -> void:
 	Sfx.play(Sfx.game_over)
 	state = State.DEAD
+	add_shake(16.0)
 	joystick.set_process_input(false)
 	joystick.output = Vector2.ZERO
-	joystick.queue_redraw()
 	for e in enemies:
 		if is_instance_valid(e):
 			e.target = null
-	score_label.text = "Score : %d pièces\nNiveau atteint : %d" % [player.coins, level]
+	if player.coins > best_score:
+		best_score = player.coins
+		_save_best()
+	gameover_score.text = "Score : %d   ·   Niveau %d\nMeilleur : %d" % [player.coins, level, best_score]
 	gameover_root.visible = true
 
 
-func _on_coin_collected() -> void:
+func _on_coin_collected(pos: Vector2) -> void:
 	Sfx.play(Sfx.coin)
 	player.add_coin()
 	coins_left -= 1
+	_burst(pos, Color(1.0, 0.85, 0.3), 8, 150.0, 0.4)
 	_update_hud()
 	if coins_left <= 0:
-		_on_level_cleared()
+		_open_exit()
+
+
+func _on_powerup(kind: int) -> void:
+	Sfx.play(Sfx.powerup)
+	if kind == Powerup.Kind.HEART:
+		player.heal(1)
+		_burst(player.global_position, Color(0.92, 0.3, 0.4), 12, 170.0, 0.5)
+	else:
+		player.grant_speed(6.0)
+		_burst(player.global_position, Color(0.4, 0.9, 1.0), 12, 170.0, 0.5)
+	_update_hud()
 
 
 func _on_player_attacked() -> void:
 	if state != State.PLAYING:
 		return
 	Sfx.play(Sfx.attack)
-	var reach := Player.ATTACK_RADIUS + Enemy.RADIUS
+	add_shake(5.0)
+	_camera_punch()
+	_burst(player.global_position + player.facing * 22.0, Color(1, 1, 1, 0.9), 10, 220.0, 0.3)
 	var survivors: Array[Enemy] = []
-	var killed := 0
 	for e in enemies:
 		if not is_instance_valid(e):
 			continue
+		var reach := Player.ATTACK_RADIUS + e.radius
 		if player.global_position.distance_to(e.global_position) <= reach:
-			e.queue_free()
-			killed += 1
+			var dir := e.global_position - player.global_position
+			if dir.length() < 0.01:
+				dir = player.facing
+			if e.take_hit(dir):
+				_kill_enemy(e)
+			else:
+				survivors.append(e)
 		else:
 			survivors.append(e)
 	enemies = survivors
-	if killed > 0:
-		Sfx.play(Sfx.enemy_die)
-		player.coins += killed          # bonus de score
-		player.coins_changed.emit(player.coins)
+
+
+func _kill_enemy(e: Enemy) -> void:
+	_burst(e.global_position, e.body_color, 16, 260.0, 0.5)
+	Sfx.play(Sfx.enemy_die)
+	player.coins += 2                 # bonus de score
+	player.coins_changed.emit(player.coins)
+	add_shake(4.0)
+	e.queue_free()
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +256,22 @@ func _clear_level() -> void:
 		if is_instance_valid(c):
 			c.queue_free()
 	coins.clear()
+	for pw in powerups:
+		if is_instance_valid(pw):
+			pw.queue_free()
+	powerups.clear()
+	for lt in _torches:
+		if is_instance_valid(lt):
+			lt.queue_free()
+	_torches.clear()
+	_torch_phase.clear()
+	for d in _decor:
+		if is_instance_valid(d):
+			d.queue_free()
+	_decor.clear()
+	if is_instance_valid(portal):
+		portal.queue_free()
+	portal = null
 
 
 func _generate_walls() -> void:
@@ -183,11 +279,8 @@ func _generate_walls() -> void:
 	for y in ROWS:
 		var row: Array = []
 		for x in COLS:
-			var border := x == 0 or y == 0 or x == COLS - 1 or y == ROWS - 1
-			row.append(border)
+			row.append(x == 0 or y == 0 or x == COLS - 1 or y == ROWS - 1)
 		walls.append(row)
-
-	# Blocs de murs internes aléatoires (on épargne la zone de départ)
 	var blocks := 8 + level * 3
 	for i in blocks:
 		var x := randi_range(2, COLS - 3)
@@ -214,6 +307,55 @@ func _build_wall_bodies() -> void:
 			wall_bodies.append(body)
 
 
+func _place_torches() -> void:
+	# Cherche des murs bordant une case de sol pour y poser des torches
+	var candidates: Array = []
+	for y in range(1, ROWS - 1):
+		for x in range(1, COLS - 1):
+			if not walls[y][x]:
+				continue
+			if not walls[y + 1][x]:   # mur avec du sol en dessous
+				candidates.append(Vector2i(x, y))
+	candidates.shuffle()
+	var count: int = min(6, candidates.size())
+	for i in count:
+		var cell: Vector2i = candidates[i]
+		var pos := _cell_to_world(cell.x, cell.y) + Vector2(0, TILE * 0.35)
+		var lt := PointLight2D.new()
+		lt.texture = _light_tex
+		lt.texture_scale = 1.7
+		lt.color = Color(1.0, 0.72, 0.40)
+		lt.energy = 0.9
+		lt.position = pos
+		add_child(lt)
+		_torches.append(lt)
+		_torch_phase.append(randf() * TAU)
+		# Braises
+		var em := CPUParticles2D.new()
+		em.position = pos
+		em.amount = 10
+		em.lifetime = 1.3
+		em.emitting = true
+		em.spread = 22.0
+		em.direction = Vector2(0, -1)
+		em.gravity = Vector2(0, -24)
+		em.initial_velocity_min = 8.0
+		em.initial_velocity_max = 22.0
+		em.scale_amount_min = 1.5
+		em.scale_amount_max = 3.0
+		em.color = Color(1.0, 0.7, 0.35, 0.85)
+		add_child(em)
+		_decor.append(em)
+
+
+func _animate_torches() -> void:
+	for i in _torches.size():
+		var lt: PointLight2D = _torches[i]
+		if is_instance_valid(lt):
+			var ph: float = _torch_phase[i]
+			lt.energy = 0.82 + sin(_time * 9.0 + ph) * 0.13 + randf() * 0.05
+
+
 func _free_cells() -> Array:
 	var cells: Array = []
 	for y in ROWS:
@@ -223,19 +365,52 @@ func _free_cells() -> Array:
 	return cells
 
 
+func _farthest_cell(cells: Array) -> Vector2i:
+	var best := SPAWN_CELL
+	var best_d := -1.0
+	for c in cells:
+		var d: float = Vector2(c).distance_to(Vector2(SPAWN_CELL))
+		if d > best_d:
+			best_d = d
+			best = c
+	return best
+
+
 func _spawn_coin(cell: Vector2i) -> void:
 	var coin := Coin.new()
 	coin.position = _cell_to_world(cell.x, cell.y)
-	coin.collected.connect(_on_coin_collected)
+	coin.collected.connect(_on_coin_collected.bind(coin.position))
 	add_child(coin)
 	coins.append(coin)
 
 
+func _spawn_powerup(cell: Vector2i, kind: int) -> void:
+	var pw := Powerup.new()
+	pw.kind = kind
+	pw.position = _cell_to_world(cell.x, cell.y)
+	pw.collected.connect(_on_powerup)
+	add_child(pw)
+	powerups.append(pw)
+
+
+func _spawn_portal(cell: Vector2i) -> void:
+	portal = Portal.new()
+	portal.position = _cell_to_world(cell.x, cell.y)
+	portal.entered.connect(_on_portal_entered)
+	add_child(portal)
+
+
 func _spawn_enemy(cell: Vector2i) -> void:
+	var roll := randf()
+	var kind := Enemy.Kind.CHASER
+	if level >= 2 and roll < 0.3:
+		kind = Enemy.Kind.FAST
+	elif level >= 3 and roll > 0.8:
+		kind = Enemy.Kind.TANK
 	var e := Enemy.new()
+	e.setup(kind, level)
 	e.position = _cell_to_world(cell.x, cell.y)
-	e.speed = min(90.0 + level * 12.0, 220.0)
-	e.target = player
+	e.target = player if state == State.PLAYING else null
 	add_child(e)
 	enemies.append(e)
 
@@ -247,6 +422,13 @@ func _create_player() -> void:
 	player.health_changed.connect(func(_c, _m): _update_hud())
 	player.coins_changed.connect(func(_c): _update_hud())
 	add_child(player)
+
+	_player_light = PointLight2D.new()
+	_player_light.texture = _light_tex
+	_player_light.texture_scale = 3.3
+	_player_light.color = Color(1.0, 0.92, 0.72)
+	_player_light.energy = 1.15
+	player.add_child(_player_light)
 
 	camera = Camera2D.new()
 	camera.limit_left = 0
@@ -264,6 +446,51 @@ func _cell_to_world(x: int, y: int) -> Vector2:
 
 
 # ---------------------------------------------------------------------------
+# Effets
+# ---------------------------------------------------------------------------
+
+func _burst(pos: Vector2, color: Color, count: int, speed: float, lifetime: float) -> void:
+	var p := CPUParticles2D.new()
+	p.position = pos
+	p.emitting = true
+	p.one_shot = true
+	p.amount = count
+	p.lifetime = lifetime
+	p.explosiveness = 1.0
+	p.spread = 180.0
+	p.initial_velocity_min = speed * 0.4
+	p.initial_velocity_max = speed
+	p.gravity = Vector2.ZERO
+	p.scale_amount_min = 2.0
+	p.scale_amount_max = 4.5
+	p.color = color
+	add_child(p)
+	get_tree().create_timer(lifetime + 0.3).timeout.connect(p.queue_free)
+
+
+func add_shake(amount: float) -> void:
+	_shake = maxf(_shake, amount)
+
+
+func _apply_shake(delta: float) -> void:
+	if camera == null:
+		return
+	if _shake > 0.1:
+		camera.offset = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * _shake
+		_shake = move_toward(_shake, 0.0, 45.0 * delta)
+	else:
+		camera.offset = Vector2.ZERO
+
+
+func _camera_punch() -> void:
+	if camera == null:
+		return
+	camera.zoom = Vector2(1.06, 1.06)
+	var tw := create_tween()
+	tw.tween_property(camera, "zoom", Vector2.ONE, 0.18)
+
+
+# ---------------------------------------------------------------------------
 # Rendu du donjon
 # ---------------------------------------------------------------------------
 
@@ -274,11 +501,11 @@ func _draw() -> void:
 		for x in COLS:
 			var r := Rect2(x * TILE, y * TILE, TILE, TILE)
 			if walls[y][x]:
-				draw_rect(r, Color(0.17, 0.15, 0.22))
-				draw_rect(r.grow(-2.0), Color(0.27, 0.24, 0.34), false, 2.0)
+				draw_rect(r, Color(0.19, 0.17, 0.25))
+				draw_rect(r.grow(-2.0), Color(0.30, 0.26, 0.38), false, 2.0)
 			else:
 				var dark := (x + y) % 2 == 0
-				draw_rect(r, Color(0.11, 0.11, 0.14) if dark else Color(0.13, 0.13, 0.17))
+				draw_rect(r, Color(0.13, 0.13, 0.17) if dark else Color(0.15, 0.15, 0.20))
 
 
 # ---------------------------------------------------------------------------
@@ -286,34 +513,37 @@ func _draw() -> void:
 # ---------------------------------------------------------------------------
 
 func _build_ui() -> void:
+	_build_vignette()
+
 	ui_layer = CanvasLayer.new()
+	ui_layer.layer = 5
 	add_child(ui_layer)
 
-	# Bandeau supérieur
 	var bar := ColorRect.new()
-	bar.color = Color(0, 0, 0, 0.35)
+	bar.color = Color(0, 0, 0, 0.32)
 	bar.position = Vector2.ZERO
-	bar.size = Vector2(720, 66)
+	bar.size = Vector2(720, 120)
 	ui_layer.add_child(bar)
 
 	level_label = _make_label("Niveau 1", HORIZONTAL_ALIGNMENT_LEFT)
-	coins_label = _make_label("Pièces 0/0", HORIZONTAL_ALIGNMENT_CENTER)
-	health_label = _make_label("Vie 5/5", HORIZONTAL_ALIGNMENT_RIGHT)
+	coins_label = _make_label("0 / 0 pièces", HORIZONTAL_ALIGNMENT_CENTER)
+	score_label = _make_label("Score 0", HORIZONTAL_ALIGNMENT_RIGHT)
 
-	# Message central temporaire (ex. "Niveau 2")
+	hearts = HeartsBar.new()
+	hearts.position = Vector2(34, 84)
+	ui_layer.add_child(hearts)
+
 	flash_label = Label.new()
-	flash_label.add_theme_font_size_override("font_size", 52)
+	flash_label.add_theme_font_size_override("font_size", 54)
 	flash_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	flash_label.size = Vector2(720, 80)
 	flash_label.position = Vector2(0, 360)
 	flash_label.visible = false
 	ui_layer.add_child(flash_label)
 
-	# Joystick tactile (au-dessus du reste sauf l'écran de fin)
 	joystick = VirtualJoystick.new()
 	ui_layer.add_child(joystick)
 
-	# Bouton d'attaque (en bas à droite, hors de la zone du joystick)
 	var attack_btn := Button.new()
 	attack_btn.text = "ATK"
 	attack_btn.add_theme_font_size_override("font_size", 40)
@@ -324,6 +554,7 @@ func _build_ui() -> void:
 	attack_btn.pressed.connect(_on_attack_button)
 	ui_layer.add_child(attack_btn)
 
+	_build_title_ui()
 	_build_gameover_ui()
 
 
@@ -332,15 +563,114 @@ func _on_attack_button() -> void:
 		player.try_attack()
 
 
+func _build_vignette() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 2
+	add_child(layer)
+	var rect := ColorRect.new()
+	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sh := Shader.new()
+	sh.code = """
+shader_type canvas_item;
+void fragment() {
+	float d = distance(SCREEN_UV, vec2(0.5, 0.5));
+	float v = smoothstep(0.32, 0.75, d);
+	COLOR = vec4(0.0, 0.0, 0.0, v * 0.85);
+}
+"""
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	rect.material = mat
+	layer.add_child(rect)
+
+
 func _make_label(text: String, align: int) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.horizontal_alignment = align
 	l.add_theme_font_size_override("font_size", 28)
 	l.size = Vector2(680, 44)
-	l.position = Vector2(20, 12)
+	l.position = Vector2(20, 14)
 	ui_layer.add_child(l)
 	return l
+
+
+func _build_title_ui() -> void:
+	title_root = Control.new()
+	title_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	title_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	title_root.visible = false
+	ui_layer.add_child(title_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.05, 0.04, 0.09, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	title_root.add_child(dim)
+
+	# Braises flottantes d'ambiance
+	var em := CPUParticles2D.new()
+	em.position = Vector2(360, 700)
+	em.amount = 46
+	em.lifetime = 5.0
+	em.emitting = true
+	em.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	em.emission_rect_extents = Vector2(380, 700)
+	em.direction = Vector2(0, -1)
+	em.spread = 30.0
+	em.gravity = Vector2(0, -12)
+	em.initial_velocity_min = 6.0
+	em.initial_velocity_max = 20.0
+	em.scale_amount_min = 1.5
+	em.scale_amount_max = 3.5
+	em.color = Color(1.0, 0.75, 0.4, 0.5)
+	title_root.add_child(em)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	title_root.add_child(center)
+
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 22)
+	center.add_child(box)
+
+	var title := Label.new()
+	title.text = "DUNGEON RUSH"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 68)
+	title.add_theme_color_override("font_color", Color(0.98, 0.82, 0.35))
+	box.add_child(title)
+
+	var sub := Label.new()
+	sub.text = "Ramasse l'or, survis, trouve la sortie."
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.add_theme_font_size_override("font_size", 26)
+	sub.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
+	box.add_child(sub)
+
+	title_best = Label.new()
+	title_best.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_best.add_theme_font_size_override("font_size", 24)
+	title_best.add_theme_color_override("font_color", Color(0.7, 0.8, 1.0))
+	box.add_child(title_best)
+
+	var play := Button.new()
+	play.text = "  ▶  JOUER  "
+	play.add_theme_font_size_override("font_size", 38)
+	play.custom_minimum_size = Vector2(300, 90)
+	play.focus_mode = Control.FOCUS_NONE
+	play.pressed.connect(start_game)
+	box.add_child(play)
+
+	var hint := Label.new()
+	hint.text = "Tactile : joystick + ATK   ·   Clavier : ZQSD + Espace"
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_font_size_override("font_size", 18)
+	hint.add_theme_color_override("font_color", Color(0.7, 0.7, 0.75))
+	box.add_child(hint)
+
+	_refresh_best_labels()
 
 
 func _build_gameover_ui() -> void:
@@ -351,7 +681,7 @@ func _build_gameover_ui() -> void:
 	ui_layer.add_child(gameover_root)
 
 	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.65)
+	dim.color = Color(0, 0, 0, 0.66)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	gameover_root.add_child(dim)
 
@@ -367,28 +697,34 @@ func _build_gameover_ui() -> void:
 	var title := Label.new()
 	title.text = "GAME OVER"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 60)
+	title.add_theme_font_size_override("font_size", 62)
 	title.add_theme_color_override("font_color", Color(0.9, 0.35, 0.32))
 	box.add_child(title)
 
-	score_label = Label.new()
-	score_label.text = ""
-	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	score_label.add_theme_font_size_override("font_size", 30)
-	box.add_child(score_label)
+	gameover_score = Label.new()
+	gameover_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	gameover_score.add_theme_font_size_override("font_size", 30)
+	box.add_child(gameover_score)
 
 	var button := Button.new()
 	button.text = "  Rejouer  "
 	button.add_theme_font_size_override("font_size", 34)
-	button.custom_minimum_size = Vector2(240, 72)
-	button.pressed.connect(start_new_game)
+	button.custom_minimum_size = Vector2(260, 78)
+	button.focus_mode = Control.FOCUS_NONE
+	button.pressed.connect(start_game)
 	box.add_child(button)
+
+
+func _refresh_best_labels() -> void:
+	if title_best != null:
+		title_best.text = "Meilleur score : %d" % best_score
 
 
 func _update_hud() -> void:
 	level_label.text = "Niveau %d" % level
-	coins_label.text = "Pièces %d/%d" % [coins_on_level - coins_left, coins_on_level]
-	health_label.text = "Vie %d/%d" % [player.health, player.max_health]
+	coins_label.text = "%d / %d pièces" % [coins_on_level - coins_left, coins_on_level]
+	score_label.text = "Score %d" % player.coins
+	hearts.set_health(player.health, player.max_health)
 
 
 func _flash(text: String) -> void:
@@ -399,3 +735,20 @@ func _flash(text: String) -> void:
 	tween.tween_interval(0.8)
 	tween.tween_property(flash_label, "modulate:a", 0.0, 0.7)
 	tween.tween_callback(func(): flash_label.visible = false)
+
+
+# ---------------------------------------------------------------------------
+# Sauvegarde
+# ---------------------------------------------------------------------------
+
+func _load_best() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SAVE_PATH) == OK:
+		best_score = int(cfg.get_value("score", "best", 0))
+
+
+func _save_best() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("score", "best", best_score)
+	cfg.save(SAVE_PATH)
+	_refresh_best_labels()

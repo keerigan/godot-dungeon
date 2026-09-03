@@ -23,6 +23,8 @@ var joystick_vector := Vector2.ZERO      ## Rempli par le joystick tactile
 var facing := Vector2.RIGHT              ## Dernière direction de déplacement
 var attack_cd := 0.0                     ## Recharge restante du coup
 var attack_anim := 0.0                   ## Temps restant de l'effet visuel
+var speed_boost := 0.0                    ## Temps restant du bonus de vitesse
+var _bob := 0.0                           ## Animation de balancement
 
 func _ready() -> void:
 	collision_layer = 2   # Le joueur est sur la "couche 2"
@@ -49,7 +51,9 @@ func _physics_process(delta: float) -> void:
 		dir = dir.normalized()
 	if dir.length() > 0.1:
 		facing = dir.normalized()
-	velocity = dir * SPEED
+		_bob += delta * 12.0
+	var spd := SPEED * (1.6 if speed_boost > 0.0 else 1.0)
+	velocity = dir * spd
 	move_and_slide()
 
 	# Attaque au clavier (Espace) — la recharge empêche le spam
@@ -62,6 +66,8 @@ func _physics_process(delta: float) -> void:
 		attack_cd -= delta
 	if attack_anim > 0.0:
 		attack_anim -= delta
+	if speed_boost > 0.0:
+		speed_boost -= delta
 	# Toujours redessiner : garantit le retour à l'état normal après le
 	# clignotement d'invincibilité / l'effet de coup.
 	queue_redraw()
@@ -88,11 +94,19 @@ func add_coin() -> void:
 	coins += 1
 	coins_changed.emit(coins)
 
+func heal(amount: int) -> void:
+	health = min(max_health, health + amount)
+	health_changed.emit(health, max_health)
+
+func grant_speed(duration: float) -> void:
+	speed_boost = maxf(speed_boost, duration)
+
 func reset() -> void:
 	health = max_health
 	invuln = 0.0
 	attack_cd = 0.0
 	attack_anim = 0.0
+	speed_boost = 0.0
 	joystick_vector = Vector2.ZERO
 	velocity = Vector2.ZERO
 	health_changed.emit(health, max_health)
@@ -107,13 +121,19 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, reach, ang - 0.9, ang + 0.9, 20,
 			Color(1.0, 1.0, 1.0, 1.0 - progress), 6.0)
 
+	# Aura de vitesse
+	if speed_boost > 0.0:
+		draw_arc(Vector2.ZERO, RADIUS + 6.0, 0.0, TAU, 32, Color(0.4, 0.9, 1.0, 0.7), 3.0)
+
 	# Clignotement pendant l'invincibilité
 	if invuln > 0.0 and int(invuln * 12.0) % 2 == 0:
 		return
-	draw_circle(Vector2.ZERO, RADIUS, Color(0.95, 0.85, 0.30))
-	draw_arc(Vector2.ZERO, RADIUS, 0.0, TAU, 32, Color(0.35, 0.30, 0.10), 3.0)
+
+	var c := Vector2(0, sin(_bob) * 2.0)   # léger balancement
+	draw_circle(c, RADIUS, Color(0.95, 0.85, 0.30))
+	draw_arc(c, RADIUS, 0.0, TAU, 32, Color(0.35, 0.30, 0.10), 3.0)
 	# Yeux
-	draw_circle(Vector2(-7, -4), 3.5, Color(0.12, 0.10, 0.15))
-	draw_circle(Vector2(7, -4), 3.5, Color(0.12, 0.10, 0.15))
+	draw_circle(c + Vector2(-7, -4), 3.5, Color(0.12, 0.10, 0.15))
+	draw_circle(c + Vector2(7, -4), 3.5, Color(0.12, 0.10, 0.15))
 	# Sourire
-	draw_arc(Vector2(0, 2), 9.0, 0.15 * PI, 0.85 * PI, 12, Color(0.12, 0.10, 0.15), 2.5)
+	draw_arc(c + Vector2(0, 2), 9.0, 0.15 * PI, 0.85 * PI, 12, Color(0.12, 0.10, 0.15), 2.5)
