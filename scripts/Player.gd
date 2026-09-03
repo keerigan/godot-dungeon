@@ -25,6 +25,8 @@ var attack_cd := 0.0                     ## Recharge restante du coup
 var attack_anim := 0.0                   ## Temps restant de l'effet visuel
 var speed_boost := 0.0                    ## Temps restant du bonus de vitesse
 var _bob := 0.0                           ## Animation de balancement
+var _blink := 0.0                         ## Temps restant d'un clignement
+var _blink_cd := 3.0                      ## Délai avant le prochain clignement
 
 func _ready() -> void:
 	collision_layer = 2   # Le joueur est sur la "couche 2"
@@ -68,6 +70,13 @@ func _physics_process(delta: float) -> void:
 		attack_anim -= delta
 	if speed_boost > 0.0:
 		speed_boost -= delta
+	# Clignement d'yeux périodique
+	_blink_cd -= delta
+	if _blink_cd <= 0.0:
+		_blink = 0.12
+		_blink_cd = randf_range(2.5, 4.8)
+	if _blink > 0.0:
+		_blink -= delta
 	# Toujours redessiner : garantit le retour à l'état normal après le
 	# clignotement d'invincibilité / l'effet de coup.
 	queue_redraw()
@@ -132,8 +141,15 @@ func _draw() -> void:
 	var c := Vector2(0, sin(_bob) * 2.0)   # léger balancement
 	draw_circle(c, RADIUS, Color(0.95, 0.85, 0.30))
 	draw_arc(c, RADIUS, 0.0, TAU, 32, Color(0.35, 0.30, 0.10), 3.0)
-	# Yeux
-	draw_circle(c + Vector2(-7, -4), 3.5, Color(0.12, 0.10, 0.15))
-	draw_circle(c + Vector2(7, -4), 3.5, Color(0.12, 0.10, 0.15))
+	# Reflet doux
+	draw_circle(c + Vector2(-6, -8), 5.0, Color(1.0, 0.96, 0.7, 0.5))
+	# Yeux (fermés pendant le clignement)
+	var eye_col := Color(0.12, 0.10, 0.15)
+	if _blink > 0.0:
+		draw_line(c + Vector2(-11, -4), c + Vector2(-3, -4), eye_col, 2.5)
+		draw_line(c + Vector2(3, -4), c + Vector2(11, -4), eye_col, 2.5)
+	else:
+		draw_circle(c + Vector2(-7, -4), 3.5, eye_col)
+		draw_circle(c + Vector2(7, -4), 3.5, eye_col)
 	# Sourire
-	draw_arc(c + Vector2(0, 2), 9.0, 0.15 * PI, 0.85 * PI, 12, Color(0.12, 0.10, 0.15), 2.5)
+	draw_arc(c + Vector2(0, 2), 9.0, 0.15 * PI, 0.85 * PI, 12, eye_col, 2.5)

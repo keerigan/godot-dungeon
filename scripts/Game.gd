@@ -130,6 +130,7 @@ func build_level() -> void:
 	_generate_walls()
 	_build_wall_bodies()
 	_place_torches()
+	_place_ambient_dust()
 
 	player.global_position = _cell_to_world(SPAWN_CELL.x, SPAWN_CELL.y)
 	player.reset()
@@ -390,6 +391,26 @@ func _place_torches() -> void:
 		_decor.append(em)
 
 
+func _place_ambient_dust() -> void:
+	var dust := CPUParticles2D.new()
+	dust.position = Vector2(MAP_W * 0.5, MAP_H * 0.5)
+	dust.amount = 40
+	dust.lifetime = 6.5
+	dust.emitting = true
+	dust.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	dust.emission_rect_extents = Vector2(MAP_W * 0.5, MAP_H * 0.5)
+	dust.direction = Vector2(0.3, -1)
+	dust.spread = 40.0
+	dust.gravity = Vector2(3, -5)
+	dust.initial_velocity_min = 3.0
+	dust.initial_velocity_max = 11.0
+	dust.scale_amount_min = 1.0
+	dust.scale_amount_max = 2.2
+	dust.color = Color(1.0, 0.92, 0.75, 0.14)
+	add_child(dust)
+	_decor.append(dust)
+
+
 func _animate_torches() -> void:
 	for i in _torches.size():
 		var lt: PointLight2D = _torches[i]
@@ -553,13 +574,55 @@ func _draw() -> void:
 		return
 	for y in ROWS:
 		for x in COLS:
-			var r := Rect2(x * TILE, y * TILE, TILE, TILE)
 			if walls[y][x]:
-				draw_rect(r, Color(0.19, 0.17, 0.25))
-				draw_rect(r.grow(-2.0), Color(0.30, 0.26, 0.38), false, 2.0)
+				_draw_wall(x, y)
 			else:
-				var dark := (x + y) % 2 == 0
-				draw_rect(r, Color(0.13, 0.13, 0.17) if dark else Color(0.15, 0.15, 0.20))
+				_draw_floor(x, y)
+
+
+## Petit bruit déterministe et stable par cellule (0..1).
+func _hash01(a: int, b: int) -> float:
+	var v := sin(a * 12.9898 + b * 78.233) * 43758.5453
+	return v - floor(v)
+
+
+func _draw_floor(x: int, y: int) -> void:
+	var r := Rect2(x * TILE, y * TILE, TILE, TILE)
+	var n := _hash01(x, y)
+	# Damier de pierre légèrement varié
+	var base := Color(0.115, 0.115, 0.15) if (x + y) % 2 == 0 else Color(0.135, 0.135, 0.175)
+	base = base.lightened(n * 0.05)
+	draw_rect(r, base)
+	# Joints (rainures) sombres
+	draw_rect(r, Color(0.06, 0.06, 0.085), false, 1.0)
+	# Fissure verticale occasionnelle (rare, en zigzag)
+	if _hash01(x * 3 + 1, y * 7 + 2) > 0.93:
+		var sx := r.position.x + TILE * (0.35 + n * 0.3)
+		var top := r.position.y + TILE * 0.16
+		var col := Color(0.07, 0.07, 0.1)
+		draw_polyline(PackedVector2Array([
+			Vector2(sx, top),
+			Vector2(sx + 4.0, top + TILE * 0.28),
+			Vector2(sx - 3.0, top + TILE * 0.5),
+			Vector2(sx + 2.0, top + TILE * 0.66),
+		]), col, 1.5)
+
+
+func _draw_wall(x: int, y: int) -> void:
+	var px := x * TILE
+	var py := y * TILE
+	var r := Rect2(px, py, TILE, TILE)
+	var n := _hash01(x, y)
+	# Face du bloc
+	draw_rect(r, Color(0.21, 0.19, 0.27).lightened(n * 0.05))
+	# Biseau clair (haut + gauche) et ombre (bas + droite) => relief
+	draw_rect(Rect2(px, py, TILE, 6), Color(0.32, 0.29, 0.40))
+	draw_rect(Rect2(px, py, 6, TILE), Color(0.28, 0.25, 0.35))
+	draw_rect(Rect2(px, py + TILE - 6, TILE, 6), Color(0.10, 0.09, 0.13))
+	draw_rect(Rect2(px + TILE - 6, py, 6, TILE), Color(0.12, 0.10, 0.15))
+	# Joint de briques au milieu
+	draw_line(Vector2(px + 6, py + TILE * 0.5), Vector2(px + TILE - 6, py + TILE * 0.5),
+		Color(0.09, 0.08, 0.11), 2.0)
 
 
 # ---------------------------------------------------------------------------
