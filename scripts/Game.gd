@@ -104,6 +104,10 @@ var theme_idx := 0
 var _stats: Dictionary = {}          ## Compteurs cumulés (persistés)
 var _unlocked: Dictionary = {}       ## Succès débloqués (persistés)
 var _damage_free_level := true       ## Niveau en cours sans dégât ?
+var gold := 0                        ## Porte-monnaie persistant (boutique)
+var up_hearts := 0                   ## Amélioration : cœurs max en plus (0-4)
+var up_shield := false               ## Amélioration : bouclier au départ
+var up_lucky := false                ## Amélioration : plus de coffres
 
 # Éclairage / ambiance
 var _light_tex: GradientTexture2D
@@ -149,6 +153,10 @@ var gameover_root: Control
 var gameover_score: Label
 var achievements_root: Control
 var pause_root: Control
+var shop_root: Control
+var _shop_list: VBoxContainer
+var _shop_gold_label: Label
+var title_gold: Label
 var _ach_list: VBoxContainer
 var _toast_label: Label
 var _toast_queue: Array = []
@@ -266,6 +274,7 @@ func start_game() -> void:
 	_exit_arrow.enabled = true
 	level = 1
 	player.coins = 0
+	player.max_health = 5 + up_hearts     # amélioration boutique
 	player.visible = true
 	build_level()
 
@@ -283,6 +292,8 @@ func build_level() -> void:
 	player.global_position = _cell_to_world(SPAWN_CELL.x, SPAWN_CELL.y)
 	player.reset()
 	player.visible = (state == State.PLAYING)
+	if state == State.PLAYING and up_shield:
+		player.grant_shield(4.0)   # amélioration boutique : bouclier de départ
 
 	var free_cells := _free_cells()
 	free_cells.shuffle()
@@ -317,8 +328,8 @@ func build_level() -> void:
 		var kind := Powerup.Kind.HEART if randf() < 0.6 else Powerup.Kind.SPEED
 		_spawn_powerup(free_cells.pop_back(), kind)
 
-	# Coffre (une chance sur deux environ)
-	if randf() < 0.6 and not free_cells.is_empty():
+	# Coffre (plus fréquent avec l'amélioration boutique)
+	if randf() < (0.85 if up_lucky else 0.6) and not free_cells.is_empty():
 		_spawn_chest(free_cells.pop_back())
 
 	# Boss tous les 5 niveaux
@@ -422,8 +433,9 @@ func _on_player_died() -> void:
 	_vibrate(300)
 	if player.coins > best_score:
 		best_score = player.coins
-		_save_prefs()
-	gameover_score.text = "Score : %d   ·   Niveau %d\nMeilleur : %d" % [player.coins, level, best_score]
+	var run := player.coins
+	gameover_score.text = "Score : %d   ·   Niveau %d\nMeilleur : %d\n+%d or en banque" % [run, level, best_score, run]
+	_bank_run()
 	gameover_root.visible = true
 
 
@@ -996,6 +1008,7 @@ func _build_ui() -> void:
 	_build_gameover_ui()
 	_build_achievements_ui()
 	_build_pause_ui()
+	_build_shop_ui()
 
 
 func _build_vignette() -> void:
@@ -1091,6 +1104,12 @@ func _build_title_ui() -> void:
 	title_best.add_theme_color_override("font_color", Color(0.7, 0.8, 1.0))
 	box.add_child(title_best)
 
+	title_gold = Label.new()
+	title_gold.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_gold.add_theme_font_size_override("font_size", 22)
+	title_gold.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
+	box.add_child(title_gold)
+
 	var play := Button.new()
 	play.text = "  ▶  JOUER  "
 	play.add_theme_font_size_override("font_size", 38)
@@ -1129,6 +1148,14 @@ func _build_title_ui() -> void:
 	ach_btn.focus_mode = Control.FOCUS_NONE
 	ach_btn.pressed.connect(_open_achievements)
 	box.add_child(ach_btn)
+
+	var shop_btn := Button.new()
+	shop_btn.text = "Boutique"
+	shop_btn.add_theme_font_size_override("font_size", 24)
+	shop_btn.custom_minimum_size = Vector2(300, 58)
+	shop_btn.focus_mode = Control.FOCUS_NONE
+	shop_btn.pressed.connect(_open_shop)
+	box.add_child(shop_btn)
 
 	_refresh_best_labels()
 
@@ -1172,6 +1199,116 @@ func _build_achievements_ui() -> void:
 	close.focus_mode = Control.FOCUS_NONE
 	close.pressed.connect(func(): achievements_root.visible = false)
 	box.add_child(close)
+
+
+func _build_shop_ui() -> void:
+	shop_root = Control.new()
+	shop_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shop_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	shop_root.visible = false
+	ui_layer.add_child(shop_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.03, 0.07, 0.92)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shop_root.add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shop_root.add_child(center)
+
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 16)
+	center.add_child(box)
+
+	var title := Label.new()
+	title.text = "BOUTIQUE"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 48)
+	title.add_theme_color_override("font_color", Color(0.98, 0.82, 0.35))
+	box.add_child(title)
+
+	_shop_gold_label = Label.new()
+	_shop_gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_shop_gold_label.add_theme_font_size_override("font_size", 26)
+	_shop_gold_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
+	box.add_child(_shop_gold_label)
+
+	_shop_list = VBoxContainer.new()
+	_shop_list.add_theme_constant_override("separation", 10)
+	box.add_child(_shop_list)
+
+	var hint := Label.new()
+	hint.text = "L'or gagné en jeu est mis en banque à la fin d'une partie."
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_font_size_override("font_size", 16)
+	hint.add_theme_color_override("font_color", Color(0.7, 0.7, 0.75))
+	box.add_child(hint)
+
+	var close := Button.new()
+	close.text = "  Fermer  "
+	close.add_theme_font_size_override("font_size", 28)
+	close.custom_minimum_size = Vector2(220, 64)
+	close.focus_mode = Control.FOCUS_NONE
+	close.pressed.connect(func(): shop_root.visible = false)
+	box.add_child(close)
+
+
+func _shop_cost(id: String) -> int:
+	match id:
+		"hearts": return 25 * (up_hearts + 1)
+		"shield": return 60
+		"lucky": return 50
+	return 0
+
+
+func _shop_maxed(id: String) -> bool:
+	match id:
+		"hearts": return up_hearts >= 4
+		"shield": return up_shield
+		"lucky": return up_lucky
+	return false
+
+
+func _shop_row_text(id: String) -> String:
+	match id:
+		"hearts": return "Cœur max +1  (%d/4)" % up_hearts
+		"shield": return "Bouclier au départ"
+		"lucky": return "Plus de coffres"
+	return id
+
+
+func _buy(id: String) -> void:
+	if _shop_maxed(id) or gold < _shop_cost(id):
+		return
+	gold -= _shop_cost(id)
+	match id:
+		"hearts": up_hearts += 1
+		"shield": up_shield = true
+		"lucky": up_lucky = true
+	Sfx.play(Sfx.powerup)
+	_vibrate(30)
+	_save_prefs()
+	_open_shop()
+
+
+func _open_shop() -> void:
+	_refresh_best_labels()
+	for c in _shop_list.get_children():
+		c.queue_free()
+	for id in ["hearts", "shield", "lucky"]:
+		var maxed := _shop_maxed(id)
+		var cost := _shop_cost(id)
+		var b := Button.new()
+		b.text = _shop_row_text(id) + ("   —   ACHETÉ" if maxed else "   —   %d or" % cost)
+		b.add_theme_font_size_override("font_size", 22)
+		b.custom_minimum_size = Vector2(460, 62)
+		b.focus_mode = Control.FOCUS_NONE
+		b.disabled = maxed or gold < cost
+		b.pressed.connect(_buy.bind(id))
+		_shop_list.add_child(b)
+	shop_root.visible = true
 
 
 func _build_pause_ui() -> void:
@@ -1232,6 +1369,7 @@ func _restart() -> void:
 
 func _quit_to_title() -> void:
 	_resume()
+	_bank_run()          # on garde l'or gagné pendant la partie
 	_goto_title()
 
 
@@ -1308,6 +1446,17 @@ func _build_gameover_ui() -> void:
 func _refresh_best_labels() -> void:
 	if title_best != null:
 		title_best.text = "Meilleur score : %d" % best_score
+	if title_gold != null:
+		title_gold.text = "Or : %d" % gold
+	if _shop_gold_label != null:
+		_shop_gold_label.text = "Or disponible : %d" % gold
+
+
+func _bank_run() -> void:
+	if player.coins > 0:
+		gold += player.coins
+		player.coins = 0
+		_save_prefs()
 
 
 func _update_hud() -> void:
@@ -1342,6 +1491,10 @@ func _load_prefs() -> void:
 			_stats = st.duplicate()
 		for id in cfg.get_value("achievements", "unlocked", []):
 			_unlocked[id] = true
+		gold = int(cfg.get_value("shop", "gold", 0))
+		up_hearts = clampi(int(cfg.get_value("shop", "hearts", 0)), 0, 4)
+		up_shield = bool(cfg.get_value("shop", "shield", false))
+		up_lucky = bool(cfg.get_value("shop", "lucky", false))
 
 
 func _save_prefs() -> void:
@@ -1351,6 +1504,10 @@ func _save_prefs() -> void:
 	cfg.set_value("options", "theme", theme_idx)
 	cfg.set_value("stats", "data", _stats)
 	cfg.set_value("achievements", "unlocked", _unlocked.keys())
+	cfg.set_value("shop", "gold", gold)
+	cfg.set_value("shop", "hearts", up_hearts)
+	cfg.set_value("shop", "shield", up_shield)
+	cfg.set_value("shop", "lucky", up_lucky)
 	cfg.save(SAVE_PATH)
 	_refresh_best_labels()
 

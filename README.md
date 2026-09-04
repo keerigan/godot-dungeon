@@ -18,9 +18,12 @@ tout en évitant des ennemis qui te poursuivent.
 - **Jeu d'esquive** : pas d'attaque directe — **déplace-toi, esquive les
   ennemis, ramasse tout l'or**, puis rejoins le **portail de sortie** qui
   s'ouvre pour passer au niveau suivant.
-- **3 types d'ennemis** (poursuiveur, rapide, costaud) qui te traquent en
+- **Ennemis variés** (poursuiveur, rapide, costaud, **fantôme** qui traverse
+  les murs, **zigzag** imprévisible, **slime** qui se divise) qui te traquent en
   **contournant les murs** (navigation A\*). Aucun n'est plus rapide que toi :
   tu peux toujours les semer.
+- **Boutique** : l'or gagné est mis en banque en fin de partie et se dépense en
+  **améliorations permanentes** (cœur max, bouclier de départ, plus de coffres).
 - **Pièges à pics** télégraphiés : évite-les… ou **attire les ennemis dedans**
   pour les éliminer (seul moyen offensif, + bonus de score).
 - **Bonus** à ramasser : ❤️ cœur (soin) et ⚡ éclair (vitesse temporaire).
