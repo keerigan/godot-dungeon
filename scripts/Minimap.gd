@@ -52,6 +52,11 @@ func _draw() -> void:
 			var cp := _to_mm(ch.position, tile, cw)
 			draw_rect(Rect2(cp - Vector2(2, 2), Vector2(4, 4)), Color(1.0, 0.8, 0.3))
 
+	# Objets à ramasser
+	for ip in game.item_pickups:
+		if is_instance_valid(ip):
+			draw_circle(_to_mm(ip.position, tile, cw), 2.0, Color(0.5, 0.9, 1.0))
+
 	# Portail
 	if is_instance_valid(game.portal):
 		var col := Color(0.5, 0.9, 1.0) if game.portal.active else Color(0.4, 0.6, 0.8)

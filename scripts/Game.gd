@@ -79,6 +79,36 @@ const PALETTES: Array = [
 		"crack": Color(0.25, 0.30, 0.15),
 		"torch": Color(0.75, 0.9, 0.4), "plight": Color(0.82, 0.95, 0.5),
 	},
+	{
+		"name": "Désert",
+		"ambient": Color(0.52, 0.44, 0.30),
+		"floor_a": Color(0.20, 0.16, 0.11), "floor_b": Color(0.23, 0.19, 0.13),
+		"wall_face": Color(0.36, 0.29, 0.18), "wall_top": Color(0.52, 0.43, 0.27),
+		"wall_left": Color(0.44, 0.35, 0.22), "wall_bot": Color(0.16, 0.12, 0.07),
+		"wall_right": Color(0.18, 0.14, 0.08), "seam": Color(0.12, 0.09, 0.05),
+		"crack": Color(0.34, 0.27, 0.15),
+		"torch": Color(1.0, 0.85, 0.45), "plight": Color(1.0, 0.93, 0.68),
+	},
+	{
+		"name": "Améthyste",
+		"ambient": Color(0.40, 0.30, 0.52),
+		"floor_a": Color(0.14, 0.10, 0.18), "floor_b": Color(0.17, 0.12, 0.22),
+		"wall_face": Color(0.28, 0.18, 0.36), "wall_top": Color(0.44, 0.28, 0.56),
+		"wall_left": Color(0.35, 0.22, 0.45), "wall_bot": Color(0.12, 0.08, 0.16),
+		"wall_right": Color(0.14, 0.09, 0.18), "seam": Color(0.10, 0.07, 0.13),
+		"crack": Color(0.62, 0.40, 0.88),
+		"torch": Color(0.85, 0.55, 1.0), "plight": Color(0.93, 0.80, 1.0),
+	},
+	{
+		"name": "Abysse",
+		"ambient": Color(0.24, 0.36, 0.40),
+		"floor_a": Color(0.08, 0.14, 0.15), "floor_b": Color(0.10, 0.16, 0.18),
+		"wall_face": Color(0.14, 0.24, 0.26), "wall_top": Color(0.24, 0.40, 0.42),
+		"wall_left": Color(0.20, 0.33, 0.35), "wall_bot": Color(0.06, 0.11, 0.12),
+		"wall_right": Color(0.08, 0.13, 0.14), "seam": Color(0.05, 0.09, 0.10),
+		"crack": Color(0.32, 0.72, 0.68),
+		"torch": Color(0.4, 0.95, 0.85), "plight": Color(0.72, 1.0, 0.95),
+	},
 ]
 
 var walls: Array = []
@@ -90,6 +120,8 @@ var coins: Array[Coin] = []
 var powerups: Array[Powerup] = []
 var traps: Array[Trap] = []
 var chests: Array[Chest] = []
+var item_pickups: Array[ItemPickup] = []
+var held_item: String = ""            ## Objet à usage unique en réserve ("" = aucun)
 var portal: Portal
 
 var player: Player
@@ -161,6 +193,7 @@ var _ach_list: VBoxContainer
 var _toast_label: Label
 var _toast_queue: Array = []
 var _toast_active := false
+var item_btn: Button
 
 
 func _ready() -> void:
@@ -183,6 +216,12 @@ func _ready() -> void:
 	build_level()
 	title_root.visible = true
 	hud_root.visible = false
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_E or event.keycode == KEY_ENTER:
+			_use_item()
 
 
 func _process(delta: float) -> void:
@@ -275,6 +314,8 @@ func start_game() -> void:
 	level = 1
 	player.coins = 0
 	player.max_health = 5 + up_hearts     # amélioration boutique
+	held_item = ""
+	_refresh_item_button()
 	player.visible = true
 	build_level()
 
@@ -331,6 +372,10 @@ func build_level() -> void:
 	# Coffre (plus fréquent avec l'amélioration boutique)
 	if randf() < (0.85 if up_lucky else 0.6) and not free_cells.is_empty():
 		_spawn_chest(free_cells.pop_back())
+
+	# Objet à usage unique posé au sol
+	if randf() < 0.5 and not free_cells.is_empty():
+		_spawn_item(free_cells.pop_back())
 
 	# Boss tous les 5 niveaux
 	var is_boss_level := (level % 5 == 0)
@@ -518,6 +563,10 @@ func _clear_level() -> void:
 		if is_instance_valid(ch):
 			ch.queue_free()
 	chests.clear()
+	for ip in item_pickups:
+		if is_instance_valid(ip):
+			ip.queue_free()
+	item_pickups.clear()
 	for lt in _torches:
 		if is_instance_valid(lt):
 			lt.queue_free()
@@ -540,6 +589,8 @@ func _generate_walls() -> void:
 			row.append(x == 0 or y == 0 or x == COLS - 1 or y == ROWS - 1)
 		walls.append(row)
 	var blocks := 34 + level * 5
+	if level % 5 == 0:
+		blocks = int(blocks * 0.55)   # niveaux de boss plus aérés
 	for i in blocks:
 		var x := randi_range(2, COLS - 3)
 		var y := randi_range(2, ROWS - 3)
@@ -700,6 +751,94 @@ func _spawn_trap(cell: Vector2i) -> void:
 	t.position = _cell_to_world(cell.x, cell.y)
 	add_child(t)
 	traps.append(t)
+
+
+func _spawn_item(cell: Vector2i) -> void:
+	var ip := ItemPickup.new()
+	ip.kind = ["bomb", "freeze", "potion", "blink"][randi() % 4]
+	ip.position = _cell_to_world(cell.x, cell.y)
+	ip.picked.connect(_on_item_picked)
+	add_child(ip)
+	item_pickups.append(ip)
+
+
+func _on_item_picked(kind: String) -> void:
+	held_item = kind
+	Sfx.play(Sfx.powerup)
+	_vibrate(30)
+	_flash("Objet : %s" % _item_name(kind))
+	_refresh_item_button()
+
+
+func _item_name(kind: String) -> String:
+	match kind:
+		"bomb": return "Bombe"
+		"freeze": return "Gel"
+		"potion": return "Potion"
+		"blink": return "Saut"
+	return kind
+
+
+func _use_item() -> void:
+	if state != State.PLAYING or held_item == "":
+		return
+	var kind := held_item
+	held_item = ""
+	_refresh_item_button()
+	_vibrate(60)
+	match kind:
+		"bomb":
+			Sfx.play(Sfx.enemy_die)
+			add_shake(12.0)
+			_burst(player.global_position, Color(1.0, 0.7, 0.3), 40, 340.0, 0.7)
+			var survivors: Array[Enemy] = []
+			for e in enemies:
+				if not is_instance_valid(e):
+					continue
+				if player.global_position.distance_to(e.global_position) <= 210.0:
+					if e.kind == Enemy.Kind.BOSS:
+						e.hp -= 3
+						e.take_hit(e.global_position - player.global_position)
+						if e.hp <= 0:
+							_kill_enemy(e)
+						else:
+							survivors.append(e)
+					else:
+						_kill_enemy(e)
+				else:
+					survivors.append(e)
+			enemies = survivors
+		"freeze":
+			Sfx.play(Sfx.powerup)
+			_freeze = maxf(_freeze, 6.0)
+			_flash("Ennemis gelés !")
+		"potion":
+			Sfx.play(Sfx.powerup)
+			player.heal(player.max_health)
+			_burst(player.global_position, Color(0.9, 0.3, 0.4), 16, 170.0, 0.5)
+		"blink":
+			Sfx.play(Sfx.attack)
+			var from := player.global_position
+			var dest := from
+			for i in range(1, 13):
+				var p := from + player.facing * (i * 16.0)
+				var c := _world_to_cell(p)
+				if walls[c.y][c.x]:
+					break
+				dest = p
+			player.global_position = dest
+			_burst(from, Color(0.5, 0.9, 1.0), 14, 180.0, 0.4)
+			_burst(dest, Color(0.5, 0.9, 1.0), 14, 180.0, 0.4)
+
+
+func _refresh_item_button() -> void:
+	if item_btn == null:
+		return
+	if held_item == "":
+		item_btn.visible = false
+	else:
+		item_btn.visible = true
+		item_btn.text = _item_name(held_item)
 
 
 func _spawn_chest(cell: Vector2i) -> void:
@@ -993,6 +1132,17 @@ func _build_ui() -> void:
 
 	joystick = VirtualJoystick.new()
 	hud_root.add_child(joystick)
+
+	# Bouton d'utilisation d'objet (bas-droite), visible seulement si on en tient un
+	item_btn = Button.new()
+	item_btn.add_theme_font_size_override("font_size", 26)
+	item_btn.size = Vector2(150, 150)
+	item_btn.position = Vector2(540, 1070)
+	item_btn.focus_mode = Control.FOCUS_NONE
+	item_btn.modulate = Color(1, 1, 1, 0.92)
+	item_btn.visible = false
+	item_btn.pressed.connect(_use_item)
+	hud_root.add_child(item_btn)
 
 	# Notification de succès (visible partout)
 	_toast_label = Label.new()

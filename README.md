@@ -33,11 +33,15 @@ tout en évitant des ennemis qui te poursuivent.
   vie (élimine-le via les pièges pour un gros bonus).
 - **Coffres** à ouvrir : récompense aléatoire parmi or, soin, vitesse,
   **aimant à pièces**, **gel des ennemis** ou **bouclier**.
+- **Objets à usage unique** ramassés au sol, déclenchés par un bouton :
+  💣 bombe (élimine les ennemis proches), ❄️ gel, 🧪 potion (soin complet),
+  ⚡ saut (téléportation courte).
+- **8 biomes / thèmes** : Néon, Lave, Glacier, Forêt, Rétro, Désert, Améthyste,
+  Abysse — ou mode Auto.
 - **Bouton pause** (menu Reprendre / Recommencer / Quitter).
 - **Succès** à débloquer (panneau sur l'écran-titre) avec notifications.
-- **5 thèmes visuels** au choix sur l'écran-titre (Néon, Lave, Glacier, Forêt,
-  Rétro) — ou mode **Auto (biomes)** qui fait évoluer l'ambiance au fil des
-  niveaux. Choix sauvegardé.
+- **8 thèmes / biomes** au choix sur l'écran-titre — ou mode **Auto (biomes)**
+  qui fait évoluer l'ambiance au fil des niveaux. Choix sauvegardé.
 - **Vibrations** (mobile) activables/désactivables depuis l'écran-titre.
 - **Vie en cœurs**, invincibilité brève après un coup reçu.
 - **Meilleur score sauvegardé** entre les parties.

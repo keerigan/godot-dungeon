@@ -9,7 +9,8 @@ extends CharacterBody2D
 enum Kind { CHASER, FAST, TANK, BOSS, GHOST, ZIGZAG, SPLITTER }
 
 var kind: int = Kind.CHASER
-var radius := 19.0
+var radius := 19.0          ## Rayon visuel
+var col_radius := 19.0      ## Rayon de collision (plus petit pour le boss)
 var speed := 120.0
 var hp := 1
 var max_hp := 1
@@ -67,6 +68,8 @@ func setup(new_kind: int, level: int) -> void:
 			speed = min(95.0 + level * 10.0, 215.0)
 			body_color = Color(0.87, 0.33, 0.31)
 	max_hp = hp
+	# Le boss reste visuellement gros mais avec une collision qui tient dans un couloir
+	col_radius = 26.0 if kind == Kind.BOSS else radius
 
 
 func _ready() -> void:
@@ -74,7 +77,7 @@ func _ready() -> void:
 	collision_mask = 0 if kind == Kind.GHOST else 1   # le fantôme traverse les murs
 	z_index = 2   # au-dessus du sol/pièges, sous le héros
 	var shape := CircleShape2D.new()
-	shape.radius = radius
+	shape.radius = col_radius
 	var cs := CollisionShape2D.new()
 	cs.shape = shape
 	add_child(cs)
