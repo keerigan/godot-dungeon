@@ -114,26 +114,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -eux
-          API="https://api.github.com/repos/${GITHUB_REPOSITORY}"
-          curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
-               -H "Accept: application/vnd.github+json" \
-               "$API/releases/tags/latest" > release.json
           python3 - <<'PY'
           import json, os, urllib.request
-          data = json.load(open("release.json"))
           keep = os.environ["APK_NAME"]
           token = os.environ["GITHUB_TOKEN"]
           repo = os.environ["GITHUB_REPOSITORY"]
+          api = f"https://api.github.com/repos/{repo}"
+
+          def gh(url, method="GET"):
+              req = urllib.request.Request(url, method=method)
+              req.add_header("Authorization", f"Bearer {token}")
+              req.add_header("Accept", "application/vnd.github+json")
+              return urllib.request.urlopen(req)
+
+          data = json.load(gh(f"{api}/releases/tags/latest"))
           for a in data.get("assets", []):
               if a["name"] == keep:
                   continue
-              url = f"https://api.github.com/repos/{repo}/releases/assets/{a['id']}"
-              req = urllib.request.Request(url, method="DELETE")
-              req.add_header("Authorization", f"Bearer {token}")
-              req.add_header("Accept", "application/vnd.github+json")
               try:
-                  urllib.request.urlopen(req)
+                  gh(f"{api}/releases/assets/{a['id']}", method="DELETE")
                   print("supprimé:", a["name"])
               except Exception as e:
                   print("échec suppression:", a["name"], e)
