@@ -6,8 +6,8 @@ extends Node2D
 ## Tout est dessiné / généré par code : aucun asset binaire.
 
 const TILE := 64
-const COLS := 13
-const ROWS := 21
+const COLS := 21
+const ROWS := 31
 const MAP_W := COLS * TILE
 const MAP_H := ROWS * TILE
 const SPAWN_CELL := Vector2i(COLS / 2, ROWS / 2)
@@ -70,6 +70,7 @@ const PALETTES: Array = [
 ]
 
 var walls: Array = []
+var _reachable: Dictionary = {}
 var wall_bodies: Array[StaticBody2D] = []
 var enemies: Array[Enemy] = []
 var coins: Array[Coin] = []
@@ -227,6 +228,7 @@ func start_game() -> void:
 func build_level() -> void:
 	_clear_level()
 	_generate_walls()
+	_compute_reachable()
 	_build_wall_bodies()
 	_build_astar()
 	_place_torches()
@@ -243,7 +245,7 @@ func build_level() -> void:
 	_spawn_portal(_farthest_cell(free_cells))
 
 	# Pièges (de plus en plus nombreux, jamais collés au départ)
-	var trap_count := 1 + int(level / 2)
+	var trap_count := mini(3 + int(level / 2), 9)
 	for i in trap_count:
 		if free_cells.is_empty():
 			break
@@ -252,7 +254,7 @@ func build_level() -> void:
 			_spawn_trap(tc)
 
 	# Pièces
-	coins_on_level = 6 + level
+	coins_on_level = mini(10 + level * 2, 44)
 	coins_left = 0
 	for i in coins_on_level:
 		if free_cells.is_empty():
@@ -270,7 +272,7 @@ func build_level() -> void:
 		_spawn_powerup(free_cells.pop_back(), kind)
 
 	# Ennemis variés, loin du héros
-	var enemy_count := mini(2 + level, 8)
+	var enemy_count := mini(3 + level, 10)
 	var placed := 0
 	for c in free_cells:
 		if placed >= enemy_count:
@@ -400,7 +402,7 @@ func _generate_walls() -> void:
 		for x in COLS:
 			row.append(x == 0 or y == 0 or x == COLS - 1 or y == ROWS - 1)
 		walls.append(row)
-	var blocks := 8 + level * 3
+	var blocks := 34 + level * 5
 	for i in blocks:
 		var x := randi_range(2, COLS - 3)
 		var y := randi_range(2, ROWS - 3)
@@ -436,7 +438,7 @@ func _place_torches() -> void:
 			if not walls[y + 1][x]:   # mur avec du sol en dessous
 				candidates.append(Vector2i(x, y))
 	candidates.shuffle()
-	var count: int = min(6, candidates.size())
+	var count: int = min(12, candidates.size())
 	for i in count:
 		var cell: Vector2i = candidates[i]
 		var pos := _cell_to_world(cell.x, cell.y) + Vector2(0, TILE * 0.35)
@@ -501,12 +503,30 @@ func _animate_torches() -> void:
 			lt.energy = 0.82 + sin(_time * 9.0 + ph) * 0.13 + randf() * 0.05
 
 
+func _compute_reachable() -> void:
+	_reachable.clear()
+	var q: Array = [SPAWN_CELL]
+	_reachable[SPAWN_CELL] = true
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	while not q.is_empty():
+		var c: Vector2i = q.pop_back()
+		for d in dirs:
+			var n: Vector2i = c + d
+			if n.x < 0 or n.y < 0 or n.x >= COLS or n.y >= ROWS:
+				continue
+			if walls[n.y][n.x] or _reachable.has(n):
+				continue
+			_reachable[n] = true
+			q.append(n)
+
+
 func _free_cells() -> Array:
 	var cells: Array = []
 	for y in ROWS:
 		for x in COLS:
-			if not walls[y][x] and Vector2i(x, y) != SPAWN_CELL:
-				cells.append(Vector2i(x, y))
+			var c := Vector2i(x, y)
+			if not walls[y][x] and c != SPAWN_CELL and _reachable.has(c):
+				cells.append(c)
 	return cells
 
 
@@ -778,6 +798,11 @@ func _build_ui() -> void:
 	hearts = HeartsBar.new()
 	hearts.position = Vector2(34, 84)
 	hud_root.add_child(hearts)
+
+	var mm := Minimap.new()
+	mm.game = self
+	mm.position = Vector2(720 - Minimap.MM_W - 16, 138)
+	hud_root.add_child(mm)
 
 	flash_label = Label.new()
 	flash_label.add_theme_font_size_override("font_size", 54)
