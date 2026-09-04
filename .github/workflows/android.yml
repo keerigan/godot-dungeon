@@ -109,31 +109,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Nettoyer les anciens APK de la release
-        if: github.event_name != 'pull_request'
+  # Nettoyage sur le runner hôte (l'image du conteneur de build n'a ni curl
+  # ni python3 ni gh) : retire de la release « latest » tout APK dont le nom
+  # ne correspond plus à l'APK courant (ex. l'ancien godot-dungeon.apk).
+  cleanup:
+    name: Nettoyer les anciens APK de la release
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Supprimer les APK obsolètes
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 - <<'PY'
-          import json, os, urllib.request
-          keep = os.environ["APK_NAME"]
-          token = os.environ["GITHUB_TOKEN"]
-          repo = os.environ["GITHUB_REPOSITORY"]
-          api = f"https://api.github.com/repos/{repo}"
-
-          def gh(url, method="GET"):
-              req = urllib.request.Request(url, method=method)
-              req.add_header("Authorization", f"Bearer {token}")
-              req.add_header("Accept", "application/vnd.github+json")
-              return urllib.request.urlopen(req)
-
-          data = json.load(gh(f"{api}/releases/tags/latest"))
-          for a in data.get("assets", []):
-              if a["name"] == keep:
-                  continue
-              try:
-                  gh(f"{api}/releases/assets/{a['id']}", method="DELETE")
-                  print("supprimé:", a["name"])
-              except Exception as e:
-                  print("échec suppression:", a["name"], e)
-          PY
+          set -eu
+          names=$(gh release view latest --repo "$GITHUB_REPOSITORY" \
+                    --json assets --jq '.assets[].name')
+          for name in $names; do
+            if [ "$name" != "$APK_NAME" ]; then
+              echo "Suppression de $name"
+              gh release delete-asset latest "$name" \
+                --repo "$GITHUB_REPOSITORY" --yes
+            fi
+          done
