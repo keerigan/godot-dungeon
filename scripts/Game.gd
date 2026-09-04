@@ -127,6 +127,7 @@ var _torch_phase: Array = []
 var _decor: Array[Node] = []      # particules d'ambiance à libérer entre niveaux
 var _time := 0.0
 var _shake := 0.0
+var _freeze := 0.0                    ## Gel des ennemis (bonus de coffre)
 var _astar: AStarGrid2D
 var _path_timer := 0.0
 
@@ -146,6 +147,7 @@ var theme_btn: Button
 var gameover_root: Control
 var gameover_score: Label
 var achievements_root: Control
+var pause_root: Control
 var _ach_list: VBoxContainer
 var _toast_label: Label
 var _toast_queue: Array = []
@@ -187,6 +189,22 @@ func _process(delta: float) -> void:
 	if _path_timer <= 0.0:
 		_path_timer = 0.4
 		_update_enemy_paths()
+
+	# Gel des ennemis (bonus)
+	if _freeze > 0.0:
+		_freeze -= delta
+	var frozen_now := _freeze > 0.0
+	for e in enemies:
+		if is_instance_valid(e):
+			e.frozen = frozen_now
+
+	# Aimant à pièces (bonus)
+	if player.magnet > 0.0:
+		for c in coins:
+			if is_instance_valid(c):
+				var to_p := player.global_position - c.global_position
+				if to_p.length() < 240.0:
+					c.global_position += to_p.normalized() * 360.0 * delta
 
 	# Contact ennemi -> dégâts au joueur
 	for e in enemies:
@@ -361,18 +379,27 @@ func _on_chest_opened(pos: Vector2) -> void:
 	Sfx.play(Sfx.powerup)
 	_vibrate(50)
 	_burst(pos, Color(1.0, 0.85, 0.35), 22, 230.0, 0.6)
-	var roll := randf()
-	if roll < 0.4:
-		player.coins += 5
-		player.coins_changed.emit(player.coins)
-		_stat_add("coins", 5)
-		_flash("Coffre : +5 or !")
-	elif roll < 0.72:
-		player.heal(2)
-		_flash("Coffre : soin +2 !")
-	else:
-		player.grant_speed(8.0)
-		_flash("Coffre : vitesse !")
+	match ["gold", "heal", "speed", "magnet", "freeze", "shield"][randi() % 6]:
+		"gold":
+			player.coins += 5
+			player.coins_changed.emit(player.coins)
+			_stat_add("coins", 5)
+			_flash("Coffre : +5 or !")
+		"heal":
+			player.heal(2)
+			_flash("Coffre : soin +2 !")
+		"speed":
+			player.grant_speed(8.0)
+			_flash("Coffre : vitesse !")
+		"magnet":
+			player.grant_magnet(8.0)
+			_flash("Coffre : aimant à pièces !")
+		"freeze":
+			_freeze = maxf(_freeze, 5.0)
+			_flash("Coffre : ennemis gelés !")
+		"shield":
+			player.grant_shield(6.0)
+			_flash("Coffre : bouclier !")
 	_stat_add("chests", 1)
 	_check_achievements()
 
@@ -899,8 +926,18 @@ func _build_ui() -> void:
 	hud_root.add_child(bar)
 
 	level_label = _make_label("Niveau 1", HORIZONTAL_ALIGNMENT_LEFT)
+	level_label.position = Vector2(78, 14)   # laisse la place au bouton pause
 	coins_label = _make_label("0 / 0 pièces", HORIZONTAL_ALIGNMENT_CENTER)
 	score_label = _make_label("Score 0", HORIZONTAL_ALIGNMENT_RIGHT)
+
+	var pause_btn := Button.new()
+	pause_btn.text = "II"
+	pause_btn.add_theme_font_size_override("font_size", 26)
+	pause_btn.position = Vector2(14, 12)
+	pause_btn.size = Vector2(54, 50)
+	pause_btn.focus_mode = Control.FOCUS_NONE
+	pause_btn.pressed.connect(_pause)
+	hud_root.add_child(pause_btn)
 
 	hearts = HeartsBar.new()
 	hearts.position = Vector2(34, 84)
@@ -935,6 +972,7 @@ func _build_ui() -> void:
 	_build_title_ui()
 	_build_gameover_ui()
 	_build_achievements_ui()
+	_build_pause_ui()
 
 
 func _build_vignette() -> void:
@@ -1111,6 +1149,81 @@ func _build_achievements_ui() -> void:
 	close.focus_mode = Control.FOCUS_NONE
 	close.pressed.connect(func(): achievements_root.visible = false)
 	box.add_child(close)
+
+
+func _build_pause_ui() -> void:
+	pause_root = Control.new()
+	pause_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	pause_root.visible = false
+	pause_root.process_mode = Node.PROCESS_MODE_ALWAYS   # actif même en pause
+	ui_layer.add_child(pause_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.03, 0.07, 0.78)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_root.add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_root.add_child(center)
+
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 22)
+	center.add_child(box)
+
+	var title := Label.new()
+	title.text = "PAUSE"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 56)
+	title.add_theme_color_override("font_color", Color(0.98, 0.82, 0.35))
+	box.add_child(title)
+
+	for entry in [["  Reprendre  ", _resume], ["  Recommencer  ", _restart], ["  Quitter  ", _quit_to_title]]:
+		var b := Button.new()
+		b.text = entry[0]
+		b.add_theme_font_size_override("font_size", 30)
+		b.custom_minimum_size = Vector2(280, 70)
+		b.focus_mode = Control.FOCUS_NONE
+		b.pressed.connect(entry[1])
+		box.add_child(b)
+
+
+func _pause() -> void:
+	if state != State.PLAYING or pause_root.visible:
+		return
+	pause_root.visible = true
+	get_tree().paused = true
+
+
+func _resume() -> void:
+	get_tree().paused = false
+	pause_root.visible = false
+
+
+func _restart() -> void:
+	_resume()
+	start_game()
+
+
+func _quit_to_title() -> void:
+	_resume()
+	_goto_title()
+
+
+func _goto_title() -> void:
+	state = State.TITLE
+	player.visible = false
+	joystick.set_process_input(false)
+	joystick.output = Vector2.ZERO
+	hud_root.visible = false
+	gameover_root.visible = false
+	build_level()
+	title_root.visible = true
+	_refresh_best_labels()
+	if theme_btn != null:
+		theme_btn.text = _theme_label()
 
 
 func _open_achievements() -> void:

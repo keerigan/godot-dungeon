@@ -22,6 +22,7 @@ var _wobble := 0.0
 var _hit_cd := 0.0                        ## Anti multi-coups (pièges surtout)
 var _charge_t := 0.0                       ## Temps de charge restant (boss)
 var _charge_cd := 3.0                      ## Délai avant la prochaine charge (boss)
+var frozen := false                        ## Gelé (bonus de coffre) : ne bouge plus
 
 var path: PackedVector2Array = PackedVector2Array()  ## Chemin A* (points monde)
 var path_i := 0
@@ -95,7 +96,7 @@ func _physics_process(delta: float) -> void:
 		have_goal = true
 
 	var chase := Vector2.ZERO
-	if have_goal:
+	if have_goal and not frozen:
 		var to_goal := goal - global_position
 		if to_goal.length() > 1.0:
 			chase = to_goal.normalized() * spd
@@ -148,6 +149,10 @@ func _draw() -> void:
 	draw_circle(Vector2(r * 0.32, -r * 0.15 * squash), eye, Color(1, 1, 1))
 	draw_circle(Vector2(-r * 0.32, -r * 0.15 * squash), eye * 0.45, Color(0.1, 0.05, 0.05))
 	draw_circle(Vector2(r * 0.32, -r * 0.15 * squash), eye * 0.45, Color(0.1, 0.05, 0.05))
+	# Givre quand gelé
+	if frozen:
+		draw_circle(Vector2.ZERO, r, Color(0.6, 0.85, 1.0, 0.4))
+		draw_arc(Vector2.ZERO, r, 0.0, TAU, 24, Color(0.8, 0.95, 1.0, 0.8), 2.0)
 	# Flash blanc quand touché
 	if _flash > 0.0:
 		draw_circle(Vector2.ZERO, r, Color(1, 1, 1, clampf(_flash / 0.14, 0.0, 0.85)))

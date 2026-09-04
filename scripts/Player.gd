@@ -18,6 +18,8 @@ var invuln := 0.0                       ## Temps d'invincibilité restant (secon
 var joystick_vector := Vector2.ZERO      ## Rempli par le joystick tactile
 var facing := Vector2.RIGHT              ## Dernière direction de déplacement
 var speed_boost := 0.0                    ## Temps restant du bonus de vitesse
+var magnet := 0.0                         ## Temps restant de l'aimant à pièces
+var shield := 0.0                         ## Temps restant du bouclier (invincible)
 var _bob := 0.0                           ## Animation de balancement
 var _blink := 0.0                         ## Temps restant d'un clignement
 var _blink_cd := 3.0                      ## Délai avant le prochain clignement
@@ -56,6 +58,10 @@ func _physics_process(delta: float) -> void:
 		invuln -= delta
 	if speed_boost > 0.0:
 		speed_boost -= delta
+	if magnet > 0.0:
+		magnet -= delta
+	if shield > 0.0:
+		shield -= delta
 	# Clignement d'yeux périodique
 	_blink_cd -= delta
 	if _blink_cd <= 0.0:
@@ -68,7 +74,7 @@ func _physics_process(delta: float) -> void:
 	queue_redraw()
 
 func take_damage(amount: int) -> void:
-	if invuln > 0.0:
+	if shield > 0.0 or invuln > 0.0:
 		return
 	health = max(0, health - amount)
 	invuln = 1.0
@@ -89,10 +95,18 @@ func heal(amount: int) -> void:
 func grant_speed(duration: float) -> void:
 	speed_boost = maxf(speed_boost, duration)
 
+func grant_magnet(duration: float) -> void:
+	magnet = maxf(magnet, duration)
+
+func grant_shield(duration: float) -> void:
+	shield = maxf(shield, duration)
+
 func reset() -> void:
 	health = max_health
 	invuln = 0.0
 	speed_boost = 0.0
+	magnet = 0.0
+	shield = 0.0
 	joystick_vector = Vector2.ZERO
 	velocity = Vector2.ZERO
 	health_changed.emit(health, max_health)
@@ -107,6 +121,13 @@ func _draw() -> void:
 	# Aura de vitesse
 	if speed_boost > 0.0:
 		draw_arc(Vector2.ZERO, RADIUS + 6.0, 0.0, TAU, 32, Color(0.4, 0.9, 1.0, 0.7), 3.0)
+	# Aura d'aimant (or)
+	if magnet > 0.0:
+		draw_arc(Vector2.ZERO, RADIUS + 11.0, 0.0, TAU, 22, Color(1.0, 0.9, 0.4, 0.5), 2.0)
+	# Bouclier (bleu clair)
+	if shield > 0.0:
+		draw_circle(Vector2.ZERO, RADIUS + 8.0, Color(0.5, 0.8, 1.0, 0.18))
+		draw_arc(Vector2.ZERO, RADIUS + 8.0, 0.0, TAU, 36, Color(0.6, 0.85, 1.0, 0.85), 3.0)
 
 	# Clignotement pendant l'invincibilité
 	if invuln > 0.0 and int(invuln * 12.0) % 2 == 0:

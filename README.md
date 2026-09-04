@@ -28,7 +28,9 @@ tout en évitant des ennemis qui te poursuivent.
   d'écran.
 - **Boss** tous les 5 niveaux : gros, coriace, charge périodiquement, barre de
   vie (élimine-le via les pièges pour un gros bonus).
-- **Coffres** à ouvrir : récompense aléatoire (or, soin ou vitesse).
+- **Coffres** à ouvrir : récompense aléatoire parmi or, soin, vitesse,
+  **aimant à pièces**, **gel des ennemis** ou **bouclier**.
+- **Bouton pause** (menu Reprendre / Recommencer / Quitter).
 - **Succès** à débloquer (panneau sur l'écran-titre) avec notifications.
 - **5 thèmes visuels** au choix sur l'écran-titre (Néon, Lave, Glacier, Forêt,
   Rétro) — ou mode **Auto (biomes)** qui fait évoluer l'ambiance au fil des
