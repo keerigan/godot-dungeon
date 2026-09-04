@@ -39,7 +39,9 @@ tout en évitant des ennemis qui te poursuivent.
 - **8 biomes / thèmes** : Néon, Lave, Glacier, Forêt, Rétro, Désert, Améthyste,
   Abysse — ou mode Auto.
 - **Bouton pause** (menu Reprendre / Recommencer / Quitter).
-- **Succès** à débloquer (panneau sur l'écran-titre) avec notifications.
+- **Succès** à débloquer (panneau sur l'écran-titre) avec progression et
+  notifications.
+- **Défi du jour** : un objectif quotidien (même pour tous) qui rapporte de l'or.
 - **8 thèmes / biomes** au choix sur l'écran-titre — ou mode **Auto (biomes)**
   qui fait évoluer l'ambiance au fil des niveaux. Choix sauvegardé.
 - **Vibrations** (mobile) activables/désactivables depuis l'écran-titre.

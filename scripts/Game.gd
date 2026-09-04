@@ -140,6 +140,11 @@ var gold := 0                        ## Porte-monnaie persistant (boutique)
 var up_hearts := 0                   ## Amélioration : cœurs max en plus (0-4)
 var up_shield := false               ## Amélioration : bouclier au départ
 var up_lucky := false                ## Amélioration : plus de coffres
+var _daily: Dictionary = {}          ## Défi du jour (choisi selon la date)
+var _daily_done := false             ## Défi du jour déjà réussi aujourd'hui ?
+var daily_done_key := ""             ## Clé du jour où le défi a été réussi
+var _run_kills := 0                  ## Ennemis éliminés dans la partie en cours
+var _run_chests := 0                 ## Coffres ouverts dans la partie en cours
 
 # Éclairage / ambiance
 var _light_tex: GradientTexture2D
@@ -179,6 +184,7 @@ var hearts: HeartsBar
 var flash_label: Label
 var title_root: Control
 var title_best: Label
+var daily_label: Label
 var vib_btn: Button
 var theme_btn: Button
 var gameover_root: Control
@@ -199,6 +205,7 @@ var item_btn: Button
 func _ready() -> void:
 	randomize()
 	_load_prefs()
+	_compute_daily()
 	_unpack_theme()
 	_light_tex = FX.make_light_texture(256)
 
@@ -316,6 +323,8 @@ func start_game() -> void:
 	player.max_health = 5 + up_hearts     # amélioration boutique
 	held_item = ""
 	_refresh_item_button()
+	_run_kills = 0
+	_run_chests = 0
 	player.visible = true
 	build_level()
 
@@ -405,6 +414,7 @@ func build_level() -> void:
 			_stats["best_level"] = level
 		_damage_free_level = true
 		_check_achievements()
+		_check_daily()
 
 
 func _level_banner() -> String:
@@ -461,7 +471,9 @@ func _on_chest_opened(pos: Vector2) -> void:
 			player.grant_shield(6.0)
 			_flash("Coffre : bouclier !")
 	_stat_add("chests", 1)
+	_run_chests += 1
 	_check_achievements()
+	_check_daily()
 
 
 func _on_player_died() -> void:
@@ -492,6 +504,7 @@ func _on_coin_collected(pos: Vector2) -> void:
 	_burst(pos, Color(1.0, 0.85, 0.3), 8, 150.0, 0.4)
 	_update_hud()
 	_check_achievements()
+	_check_daily()
 	if coins_left <= 0:
 		_open_exit()
 
@@ -527,7 +540,9 @@ func _kill_enemy(e: Enemy) -> void:
 		_stat_add("coins", 2)
 	player.coins_changed.emit(player.coins)
 	_stat_add("kills", 1)
+	_run_kills += 1
 	_check_achievements()
+	_check_daily()
 	if e.kind == Enemy.Kind.SPLITTER:
 		_spawn_mini(e.global_position + Vector2(-16, 0))
 		_spawn_mini(e.global_position + Vector2(16, 0))
@@ -1260,6 +1275,11 @@ func _build_title_ui() -> void:
 	title_gold.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
 	box.add_child(title_gold)
 
+	daily_label = Label.new()
+	daily_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	daily_label.add_theme_font_size_override("font_size", 20)
+	box.add_child(daily_label)
+
 	var play := Button.new()
 	play.text = "  ▶  JOUER  "
 	play.add_theme_font_size_override("font_size", 38)
@@ -1604,6 +1624,7 @@ func _refresh_best_labels() -> void:
 		title_gold.text = "Or : %d" % gold
 	if _shop_gold_label != null:
 		_shop_gold_label.text = "Or disponible : %d" % gold
+	_refresh_daily_label()
 
 
 func _bank_run() -> void:
@@ -1611,6 +1632,66 @@ func _bank_run() -> void:
 		gold += player.coins
 		player.coins = 0
 		_save_prefs()
+
+
+# ---------------------------------------------------------------------------
+# Défi du jour
+# ---------------------------------------------------------------------------
+
+func _daily_key() -> String:
+	var d := Time.get_date_dict_from_system()
+	return "%04d%02d%02d" % [d.year, d.month, d.day]
+
+
+## Choisit le défi du jour (déterministe pour toute la journée).
+func _compute_daily() -> void:
+	var pool: Array = [
+		{"text": "Atteins le niveau 5", "stat": "level", "goal": 5},
+		{"text": "Ramasse 45 pièces en une partie", "stat": "coins", "goal": 45},
+		{"text": "Élimine 8 ennemis en une partie", "stat": "kills", "goal": 8},
+		{"text": "Ouvre 3 coffres en une partie", "stat": "chests", "goal": 3},
+		{"text": "Atteins le niveau 7", "stat": "level", "goal": 7},
+	]
+	var key := _daily_key()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(key)
+	_daily = pool[rng.randi() % pool.size()]
+	_daily_done = (daily_done_key == key)
+
+
+func _daily_progress() -> int:
+	match _daily.get("stat", ""):
+		"level": return level
+		"coins": return player.coins
+		"kills": return _run_kills
+		"chests": return _run_chests
+	return 0
+
+
+func _check_daily() -> void:
+	if _daily_done or _daily.is_empty() or state != State.PLAYING:
+		return
+	if _daily_progress() >= int(_daily["goal"]):
+		_daily_done = true
+		daily_done_key = _daily_key()
+		gold += 50
+		_save_prefs()
+		_queue_toast("Défi du jour réussi !  +50 or")
+		_refresh_daily_label()
+
+
+func _refresh_daily_label() -> void:
+	if daily_label == null:
+		return
+	if _daily.is_empty():
+		daily_label.text = ""
+		return
+	if _daily_done:
+		daily_label.text = "Défi du jour : %s  (fait)" % _daily["text"]
+		daily_label.add_theme_color_override("font_color", Color(0.5, 0.9, 0.5))
+	else:
+		daily_label.text = "Défi du jour : %s  (+50 or)" % _daily["text"]
+		daily_label.add_theme_color_override("font_color", Color(0.9, 0.8, 0.5))
 
 
 func _update_hud() -> void:
@@ -1649,6 +1730,7 @@ func _load_prefs() -> void:
 		up_hearts = clampi(int(cfg.get_value("shop", "hearts", 0)), 0, 4)
 		up_shield = bool(cfg.get_value("shop", "shield", false))
 		up_lucky = bool(cfg.get_value("shop", "lucky", false))
+		daily_done_key = str(cfg.get_value("daily", "done_key", ""))
 
 
 func _save_prefs() -> void:
@@ -1662,6 +1744,7 @@ func _save_prefs() -> void:
 	cfg.set_value("shop", "hearts", up_hearts)
 	cfg.set_value("shop", "shield", up_shield)
 	cfg.set_value("shop", "lucky", up_lucky)
+	cfg.set_value("daily", "done_key", daily_done_key)
 	cfg.save(SAVE_PATH)
 	_refresh_best_labels()
 
