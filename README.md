@@ -1,9 +1,9 @@
-# 🏰 Godot Dungeon
+# 🌑 Gloomrunner
 
-Un petit jeu de **donjon 2D** natif **Android**, écrit en **GDScript** avec le
-moteur **Godot 4**. Tu incarnes un héros qui explore un donjon généré
-aléatoirement, ramasse toutes les pièces d'un niveau pour passer au suivant,
-tout en évitant des ennemis qui te poursuivent.
+Un jeu de **donjon d'esquive** natif **Android**, écrit en **GDScript** avec le
+moteur **Godot 4**. Tu incarnes une lueur qui explore un donjon généré
+aléatoirement, ramasse tout l'or d'un niveau pour ouvrir la sortie, tout en
+esquivant des monstres qui te traquent — sans jamais attaquer.
 
 > 100 % code, **aucun asset binaire** : tous les graphismes sont dessinés par
 > programme (`_draw`). Le projet est donc léger et parfait pour git.

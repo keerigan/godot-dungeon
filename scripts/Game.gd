@@ -1250,9 +1250,9 @@ func _build_title_ui() -> void:
 	center.add_child(box)
 
 	var title := Label.new()
-	title.text = "DUNGEON RUSH"
+	title.text = "GLOOMRUNNER"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 68)
+	title.add_theme_font_size_override("font_size", 62)
 	title.add_theme_color_override("font_color", Color(0.98, 0.82, 0.35))
 	box.add_child(title)
 
@@ -1289,7 +1289,7 @@ func _build_title_ui() -> void:
 	box.add_child(play)
 
 	var hint := Label.new()
-	hint.text = "Déplace-toi, esquive, ramasse l'or   ·   Clavier : ZQSD / flèches"
+	hint.text = "Déplace-toi, esquive, ramasse l'or, trouve la sortie"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_font_size_override("font_size", 18)
 	hint.add_theme_color_override("font_color", Color(0.7, 0.7, 0.75))
