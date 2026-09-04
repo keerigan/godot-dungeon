@@ -1542,8 +1542,12 @@ func _open_achievements() -> void:
 		c.queue_free()
 	for a in ACHIEVEMENTS:
 		var done: bool = _unlocked.has(a["id"])
+		var prog := ""
+		if not done:
+			var cur: int = mini(int(_stats.get(a["stat"], 0)), int(a["need"]))
+			prog = "   (%d/%d)" % [cur, int(a["need"])]
 		var l := Label.new()
-		l.text = ("[x]  " if done else "[  ]  ") + a["name"] + " — " + a["desc"]
+		l.text = ("[x]  " if done else "[  ]  ") + a["name"] + " — " + a["desc"] + prog
 		l.add_theme_font_size_override("font_size", 20)
 		l.add_theme_color_override("font_color",
 			Color(1.0, 0.85, 0.4) if done else Color(0.5, 0.5, 0.56))
