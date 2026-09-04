@@ -270,7 +270,7 @@ func build_level() -> void:
 		_spawn_powerup(free_cells.pop_back(), kind)
 
 	# Ennemis variés, loin du héros
-	var enemy_count := 2 + level
+	var enemy_count := mini(2 + level, 8)
 	var placed := 0
 	for c in free_cells:
 		if placed >= enemy_count:
@@ -342,31 +342,6 @@ func _on_powerup(kind: int) -> void:
 		player.grant_speed(6.0)
 		_burst(player.global_position, Color(0.4, 0.9, 1.0), 12, 170.0, 0.5)
 	_update_hud()
-
-
-func _on_player_attacked() -> void:
-	if state != State.PLAYING:
-		return
-	Sfx.play(Sfx.attack)
-	add_shake(5.0)
-	_camera_punch()
-	_burst(player.global_position + player.facing * 22.0, Color(1, 1, 1, 0.9), 10, 220.0, 0.3)
-	var survivors: Array[Enemy] = []
-	for e in enemies:
-		if not is_instance_valid(e):
-			continue
-		var reach := Player.ATTACK_RADIUS + e.radius
-		if player.global_position.distance_to(e.global_position) <= reach:
-			var dir := e.global_position - player.global_position
-			if dir.length() < 0.01:
-				dir = player.facing
-			if e.take_hit(dir):
-				_kill_enemy(e)
-			else:
-				survivors.append(e)
-		else:
-			survivors.append(e)
-	enemies = survivors
 
 
 func _kill_enemy(e: Enemy) -> void:
@@ -598,7 +573,6 @@ func _create_player() -> void:
 	player = Player.new()
 	player.z_index = 3   # le héros est toujours au premier plan
 	player.died.connect(_on_player_died)
-	player.attacked.connect(_on_player_attacked)
 	player.health_changed.connect(func(_c, _m): _update_hud())
 	player.coins_changed.connect(func(_c): _update_hud())
 	add_child(player)
@@ -816,23 +790,8 @@ func _build_ui() -> void:
 	joystick = VirtualJoystick.new()
 	hud_root.add_child(joystick)
 
-	var attack_btn := Button.new()
-	attack_btn.text = "ATK"
-	attack_btn.add_theme_font_size_override("font_size", 40)
-	attack_btn.size = Vector2(150, 150)
-	attack_btn.position = Vector2(540, 1070)
-	attack_btn.focus_mode = Control.FOCUS_NONE
-	attack_btn.modulate = Color(1, 1, 1, 0.88)
-	attack_btn.pressed.connect(_on_attack_button)
-	hud_root.add_child(attack_btn)
-
 	_build_title_ui()
 	_build_gameover_ui()
-
-
-func _on_attack_button() -> void:
-	if state == State.PLAYING:
-		player.try_attack()
 
 
 func _build_vignette() -> void:
@@ -937,7 +896,7 @@ func _build_title_ui() -> void:
 	box.add_child(play)
 
 	var hint := Label.new()
-	hint.text = "Tactile : joystick + ATK   ·   Clavier : ZQSD + Espace"
+	hint.text = "Déplace-toi, esquive, ramasse l'or   ·   Clavier : ZQSD / flèches"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_font_size_override("font_size", 18)
 	hint.add_theme_color_override("font_color", Color(0.7, 0.7, 0.75))

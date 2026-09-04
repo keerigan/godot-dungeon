@@ -15,14 +15,17 @@ tout en évitant des ennemis qui te poursuivent.
 - **Écran-titre** animé (braises flottantes, musique d'ambiance).
 - Donjon **plongé dans le noir** avec **éclairage dynamique** : halo autour du
   héros, **torches vacillantes** et braises, vignettage cinématographique.
-- Déplace le héros, **ramasse toutes les pièces**, puis rejoins le **portail de
-  sortie** qui s'ouvre pour passer au niveau suivant.
-- **Attaque** (arc lumineux) : élimine les ennemis, avec **recul**, **flash**,
-  **particules**, **screen shake** et bonus de score.
-- **3 types d'ennemis** : poursuiveur, rapide, et costaud (2 PV).
-- **Pièges à pics** qui sortent par cycles (télégraphiés) : évite-les quand ils
-  sont sortis !
+- **Jeu d'esquive** : pas d'attaque directe — **déplace-toi, esquive les
+  ennemis, ramasse tout l'or**, puis rejoins le **portail de sortie** qui
+  s'ouvre pour passer au niveau suivant.
+- **3 types d'ennemis** (poursuiveur, rapide, costaud) qui te traquent en
+  **contournant les murs** (navigation A\*). Aucun n'est plus rapide que toi :
+  tu peux toujours les semer.
+- **Pièges à pics** télégraphiés : évite-les… ou **attire les ennemis dedans**
+  pour les éliminer (seul moyen offensif, + bonus de score).
 - **Bonus** à ramasser : ❤️ cœur (soin) et ⚡ éclair (vitesse temporaire).
+- **5 thèmes visuels** au choix sur l'écran-titre (Néon, Lave, Glacier, Forêt,
+  Rétro), sauvegardés.
 - **Vibrations** (mobile) activables/désactivables depuis l'écran-titre.
 - **Vie en cœurs**, invincibilité brève après un coup reçu.
 - **Meilleur score sauvegardé** entre les parties.
@@ -30,10 +33,9 @@ tout en évitant des ennemis qui te poursuivent.
 - À 0 point de vie → **Game Over**, puis bouton **Rejouer**.
 
 ### Contrôles
-- **Android / tactile** : joystick flottant à **gauche** (pose le doigt et
-  glisse) + bouton **ATK** en bas à droite pour attaquer.
-- **PC (test dans l'éditeur)** : **ZQSD / WASD** ou **flèches** pour bouger,
-  **Espace** pour attaquer.
+- **Android / tactile** : joystick flottant — pose le doigt **n'importe où** et
+  glisse pour te diriger (jeu à un pouce).
+- **PC (test dans l'éditeur)** : **ZQSD / WASD** ou **flèches**.
 
 ---
 

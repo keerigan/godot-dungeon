@@ -7,13 +7,9 @@ extends CharacterBody2D
 signal died
 signal health_changed(current: int, maximum: int)
 signal coins_changed(count: int)
-signal attacked                          ## Émis quand le héros donne un coup
 
-const SPEED := 260.0
+const SPEED := 265.0
 const RADIUS := 22.0
-const ATTACK_RADIUS := 78.0              ## Portée du coup
-const ATTACK_COOLDOWN := 0.40            ## Délai entre deux coups
-const ATTACK_ANIM := 0.18                ## Durée de l'effet visuel du coup
 
 var max_health := 5
 var health := 5
@@ -21,8 +17,6 @@ var coins := 0
 var invuln := 0.0                       ## Temps d'invincibilité restant (secondes)
 var joystick_vector := Vector2.ZERO      ## Rempli par le joystick tactile
 var facing := Vector2.RIGHT              ## Dernière direction de déplacement
-var attack_cd := 0.0                     ## Recharge restante du coup
-var attack_anim := 0.0                   ## Temps restant de l'effet visuel
 var speed_boost := 0.0                    ## Temps restant du bonus de vitesse
 var _bob := 0.0                           ## Animation de balancement
 var _blink := 0.0                         ## Temps restant d'un clignement
@@ -58,16 +52,8 @@ func _physics_process(delta: float) -> void:
 	velocity = dir * spd
 	move_and_slide()
 
-	# Attaque au clavier (Espace) — la recharge empêche le spam
-	if Input.is_physical_key_pressed(KEY_SPACE):
-		try_attack()
-
 	if invuln > 0.0:
 		invuln -= delta
-	if attack_cd > 0.0:
-		attack_cd -= delta
-	if attack_anim > 0.0:
-		attack_anim -= delta
 	if speed_boost > 0.0:
 		speed_boost -= delta
 	# Clignement d'yeux périodique
@@ -78,15 +64,8 @@ func _physics_process(delta: float) -> void:
 	if _blink > 0.0:
 		_blink -= delta
 	# Toujours redessiner : garantit le retour à l'état normal après le
-	# clignotement d'invincibilité / l'effet de coup.
+	# clignotement d'invincibilité.
 	queue_redraw()
-
-func try_attack() -> void:
-	if attack_cd > 0.0:
-		return
-	attack_cd = ATTACK_COOLDOWN
-	attack_anim = ATTACK_ANIM
-	attacked.emit()
 
 func take_damage(amount: int) -> void:
 	if invuln > 0.0:
@@ -113,8 +92,6 @@ func grant_speed(duration: float) -> void:
 func reset() -> void:
 	health = max_health
 	invuln = 0.0
-	attack_cd = 0.0
-	attack_anim = 0.0
 	speed_boost = 0.0
 	joystick_vector = Vector2.ZERO
 	velocity = Vector2.ZERO
@@ -126,14 +103,6 @@ func _draw() -> void:
 	draw_set_transform(Vector2(0, RADIUS * 0.85), 0.0, Vector2(1.0, 0.42))
 	draw_circle(Vector2.ZERO, RADIUS * 0.85, Color(0, 0, 0, 0.30))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-	# Effet de coup : arc lumineux devant le héros
-	if attack_anim > 0.0:
-		var progress := 1.0 - attack_anim / ATTACK_ANIM
-		var ang := facing.angle()
-		var reach := lerpf(RADIUS, ATTACK_RADIUS, progress)
-		draw_arc(Vector2.ZERO, reach, ang - 0.9, ang + 0.9, 20,
-			Color(1.0, 1.0, 1.0, 1.0 - progress), 6.0)
 
 	# Aura de vitesse
 	if speed_boost > 0.0:

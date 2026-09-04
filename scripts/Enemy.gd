@@ -30,7 +30,7 @@ func setup(new_kind: int, level: int) -> void:
 		Kind.FAST:
 			radius = 15.0
 			hp = 1
-			speed = min(150.0 + level * 14.0, 300.0)
+			speed = min(140.0 + level * 12.0, 240.0)   # < vitesse du héros
 			body_color = Color(0.95, 0.55, 0.22)
 		Kind.TANK:
 			radius = 26.0
@@ -40,7 +40,7 @@ func setup(new_kind: int, level: int) -> void:
 		_:
 			radius = 19.0
 			hp = 1
-			speed = min(95.0 + level * 12.0, 230.0)
+			speed = min(95.0 + level * 10.0, 215.0)
 			body_color = Color(0.87, 0.33, 0.31)
 
 
