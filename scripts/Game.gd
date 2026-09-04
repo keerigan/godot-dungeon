@@ -85,6 +85,7 @@ var walls: Array = []
 var _reachable: Dictionary = {}
 var wall_bodies: Array[StaticBody2D] = []
 var enemies: Array[Enemy] = []
+var _pending_enemies: Array[Enemy] = []   ## Nés en cours de frame (division du slime)
 var coins: Array[Coin] = []
 var powerups: Array[Powerup] = []
 var traps: Array[Trap] = []
@@ -247,6 +248,9 @@ func _process(delta: float) -> void:
 			else:
 				survivors.append(e)
 		enemies = survivors
+	if not _pending_enemies.is_empty():
+		enemies.append_array(_pending_enemies)
+		_pending_enemies.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -467,6 +471,9 @@ func _kill_enemy(e: Enemy) -> void:
 	player.coins_changed.emit(player.coins)
 	_stat_add("kills", 1)
 	_check_achievements()
+	if e.kind == Enemy.Kind.SPLITTER:
+		_spawn_mini(e.global_position + Vector2(-16, 0))
+		_spawn_mini(e.global_position + Vector2(16, 0))
 	e.queue_free()
 
 
@@ -701,13 +708,18 @@ func _spawn_portal(cell: Vector2i) -> void:
 
 
 func _spawn_enemy(cell: Vector2i) -> void:
-	var roll := randf()
-	var kind := Enemy.Kind.CHASER
-	if level >= 2 and roll < 0.3:
-		kind = Enemy.Kind.FAST
-	elif level >= 3 and roll > 0.8:
-		kind = Enemy.Kind.TANK
-	_spawn_enemy_kind(cell, kind)
+	# Palette d'ennemis qui s'enrichit avec le niveau
+	var pool: Array = [Enemy.Kind.CHASER, Enemy.Kind.CHASER]
+	if level >= 2:
+		pool.append(Enemy.Kind.FAST)
+	if level >= 3:
+		pool.append(Enemy.Kind.TANK)
+		pool.append(Enemy.Kind.ZIGZAG)
+	if level >= 4:
+		pool.append(Enemy.Kind.GHOST)
+	if level >= 5:
+		pool.append(Enemy.Kind.SPLITTER)
+	_spawn_enemy_kind(cell, pool[randi() % pool.size()])
 
 
 func _spawn_boss(cell: Vector2i) -> void:
@@ -721,6 +733,17 @@ func _spawn_enemy_kind(cell: Vector2i, kind: int) -> void:
 	e.target = player if state == State.PLAYING else null
 	add_child(e)
 	enemies.append(e)
+
+
+## Petit ennemi rapide né de la division d'un slime.
+func _spawn_mini(pos: Vector2) -> void:
+	var e := Enemy.new()
+	e.setup(Enemy.Kind.FAST, level)
+	e.radius = 12.0
+	e.position = pos
+	e.target = player
+	add_child(e)
+	_pending_enemies.append(e)
 
 
 func _create_player() -> void:

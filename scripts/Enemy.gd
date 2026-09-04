@@ -6,7 +6,7 @@ extends CharacterBody2D
 ##   1 = rapide (orange, petit, PV 1)
 ##   2 = costaud (violet, gros, PV 2)
 
-enum Kind { CHASER, FAST, TANK, BOSS }
+enum Kind { CHASER, FAST, TANK, BOSS, GHOST, ZIGZAG, SPLITTER }
 
 var kind: int = Kind.CHASER
 var radius := 19.0
@@ -46,6 +46,21 @@ func setup(new_kind: int, level: int) -> void:
 			hp = 5 + int(level / 5) * 2      # de plus en plus coriace
 			speed = min(140.0 + level * 3.0, 200.0)
 			body_color = Color(0.55, 0.16, 0.34)
+		Kind.GHOST:
+			radius = 18.0
+			hp = 1
+			speed = min(85.0 + level * 8.0, 185.0)   # traverse les murs
+			body_color = Color(0.72, 0.82, 0.98)
+		Kind.ZIGZAG:
+			radius = 17.0
+			hp = 1
+			speed = min(110.0 + level * 9.0, 205.0)   # trajectoire sinueuse
+			body_color = Color(0.30, 0.82, 0.70)
+		Kind.SPLITTER:
+			radius = 22.0
+			hp = 1
+			speed = min(85.0 + level * 8.0, 175.0)    # se divise à la mort
+			body_color = Color(0.5, 0.8, 0.32)
 		_:
 			radius = 19.0
 			hp = 1
@@ -56,7 +71,7 @@ func setup(new_kind: int, level: int) -> void:
 
 func _ready() -> void:
 	collision_layer = 4
-	collision_mask = 1
+	collision_mask = 0 if kind == Kind.GHOST else 1   # le fantôme traverse les murs
 	z_index = 2   # au-dessus du sol/pièges, sous le héros
 	var shape := CircleShape2D.new()
 	shape.radius = radius
@@ -82,10 +97,10 @@ func _physics_process(delta: float) -> void:
 				_charge_t = 0.7
 				_charge_cd = randf_range(2.6, 4.2)
 
-	# Suit le chemin A* (contourne les murs) ; sinon fonce vers la cible
+	# Le fantôme fonce en ligne droite (traverse les murs) ; les autres suivent A*
 	var goal := Vector2.ZERO
 	var have_goal := false
-	if path.size() > 0:
+	if kind != Kind.GHOST and path.size() > 0:
 		while path_i < path.size() and global_position.distance_to(path[path_i]) < 12.0:
 			path_i += 1
 		if path_i < path.size():
@@ -100,6 +115,8 @@ func _physics_process(delta: float) -> void:
 		var to_goal := goal - global_position
 		if to_goal.length() > 1.0:
 			chase = to_goal.normalized() * spd
+			if kind == Kind.ZIGZAG:
+				chase += chase.orthogonal().normalized() * (sin(_wobble * 2.2) * spd * 0.55)
 	velocity = chase + _knockback
 	_knockback = _knockback.move_toward(Vector2.ZERO, 1400.0 * delta)
 	move_and_slide()
@@ -140,8 +157,11 @@ func _draw() -> void:
 		draw_colored_polygon(PackedVector2Array([
 			Vector2(r * 0.7, -r * 0.6), Vector2(r * 0.35, -r * 0.55),
 			Vector2(r * 0.55, -r * 1.15)]), horn)
-	# Corps
-	draw_circle(Vector2.ZERO, r, body_color)
+	# Corps (le fantôme est translucide)
+	var bcol := body_color
+	if kind == Kind.GHOST:
+		bcol.a = 0.6
+	draw_circle(Vector2.ZERO, r, bcol)
 	draw_arc(Vector2.ZERO, r, 0.0, TAU, 28, body_color.darkened(0.4), 3.0)
 	# Yeux
 	var eye := r * 0.32
