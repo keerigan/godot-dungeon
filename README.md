@@ -24,8 +24,15 @@ tout en évitant des ennemis qui te poursuivent.
 - **Pièges à pics** télégraphiés : évite-les… ou **attire les ennemis dedans**
   pour les éliminer (seul moyen offensif, + bonus de score).
 - **Bonus** à ramasser : ❤️ cœur (soin) et ⚡ éclair (vitesse temporaire).
+- **Grande arène** avec caméra qui suit le héros et **mini-carte** en coin
+  d'écran.
+- **Boss** tous les 5 niveaux : gros, coriace, charge périodiquement, barre de
+  vie (élimine-le via les pièges pour un gros bonus).
+- **Coffres** à ouvrir : récompense aléatoire (or, soin ou vitesse).
+- **Succès** à débloquer (panneau sur l'écran-titre) avec notifications.
 - **5 thèmes visuels** au choix sur l'écran-titre (Néon, Lave, Glacier, Forêt,
-  Rétro), sauvegardés.
+  Rétro) — ou mode **Auto (biomes)** qui fait évoluer l'ambiance au fil des
+  niveaux. Choix sauvegardé.
 - **Vibrations** (mobile) activables/désactivables depuis l'écran-titre.
 - **Vie en cœurs**, invincibilité brève après un coup reçu.
 - **Meilleur score sauvegardé** entre les parties.

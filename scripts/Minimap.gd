@@ -46,6 +46,12 @@ func _draw() -> void:
 			draw_rect(Rect2(p - Vector2(cw * 0.45, cw * 0.45), Vector2(cw * 0.9, cw * 0.9)),
 				Color(0.85, 0.4, 0.4, 0.7))
 
+	# Coffres
+	for ch in game.chests:
+		if is_instance_valid(ch):
+			var cp := _to_mm(ch.position, tile, cw)
+			draw_rect(Rect2(cp - Vector2(2, 2), Vector2(4, 4)), Color(1.0, 0.8, 0.3))
+
 	# Portail
 	if is_instance_valid(game.portal):
 		var col := Color(0.5, 0.9, 1.0) if game.portal.active else Color(0.4, 0.6, 0.8)

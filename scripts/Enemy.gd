@@ -6,12 +6,13 @@ extends CharacterBody2D
 ##   1 = rapide (orange, petit, PV 1)
 ##   2 = costaud (violet, gros, PV 2)
 
-enum Kind { CHASER, FAST, TANK }
+enum Kind { CHASER, FAST, TANK, BOSS }
 
 var kind: int = Kind.CHASER
 var radius := 19.0
 var speed := 120.0
 var hp := 1
+var max_hp := 1
 var body_color := Color(0.87, 0.33, 0.31)
 var target: Node2D
 
@@ -19,6 +20,8 @@ var _knockback := Vector2.ZERO
 var _flash := 0.0
 var _wobble := 0.0
 var _hit_cd := 0.0                        ## Anti multi-coups (pièges surtout)
+var _charge_t := 0.0                       ## Temps de charge restant (boss)
+var _charge_cd := 3.0                      ## Délai avant la prochaine charge (boss)
 
 var path: PackedVector2Array = PackedVector2Array()  ## Chemin A* (points monde)
 var path_i := 0
@@ -37,11 +40,17 @@ func setup(new_kind: int, level: int) -> void:
 			hp = 2
 			speed = min(70.0 + level * 8.0, 150.0)
 			body_color = Color(0.66, 0.36, 0.86)
+		Kind.BOSS:
+			radius = 42.0
+			hp = 5 + int(level / 5) * 2      # de plus en plus coriace
+			speed = min(140.0 + level * 3.0, 200.0)
+			body_color = Color(0.55, 0.16, 0.34)
 		_:
 			radius = 19.0
 			hp = 1
 			speed = min(95.0 + level * 10.0, 215.0)
 			body_color = Color(0.87, 0.33, 0.31)
+	max_hp = hp
 
 
 func _ready() -> void:
@@ -60,6 +69,18 @@ func _physics_process(delta: float) -> void:
 	if _hit_cd > 0.0:
 		_hit_cd -= delta
 
+	# Charge périodique du boss
+	var spd := speed
+	if kind == Kind.BOSS:
+		if _charge_t > 0.0:
+			_charge_t -= delta
+			spd = speed * 1.8
+		else:
+			_charge_cd -= delta
+			if _charge_cd <= 0.0:
+				_charge_t = 0.7
+				_charge_cd = randf_range(2.6, 4.2)
+
 	# Suit le chemin A* (contourne les murs) ; sinon fonce vers la cible
 	var goal := Vector2.ZERO
 	var have_goal := false
@@ -77,7 +98,7 @@ func _physics_process(delta: float) -> void:
 	if have_goal:
 		var to_goal := goal - global_position
 		if to_goal.length() > 1.0:
-			chase = to_goal.normalized() * speed
+			chase = to_goal.normalized() * spd
 	velocity = chase + _knockback
 	_knockback = _knockback.move_toward(Vector2.ZERO, 1400.0 * delta)
 	move_and_slide()
@@ -109,6 +130,15 @@ func _draw() -> void:
 	draw_set_transform(Vector2(0, r * 0.82), 0.0, Vector2(1.0, 0.42))
 	draw_circle(Vector2.ZERO, r * 0.85, Color(0, 0, 0, 0.30))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	# Cornes du boss
+	if kind == Kind.BOSS:
+		var horn := body_color.darkened(0.35)
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(-r * 0.7, -r * 0.6), Vector2(-r * 0.35, -r * 0.55),
+			Vector2(-r * 0.55, -r * 1.15)]), horn)
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(r * 0.7, -r * 0.6), Vector2(r * 0.35, -r * 0.55),
+			Vector2(r * 0.55, -r * 1.15)]), horn)
 	# Corps
 	draw_circle(Vector2.ZERO, r, body_color)
 	draw_arc(Vector2.ZERO, r, 0.0, TAU, 28, body_color.darkened(0.4), 3.0)
@@ -121,3 +151,12 @@ func _draw() -> void:
 	# Flash blanc quand touché
 	if _flash > 0.0:
 		draw_circle(Vector2.ZERO, r, Color(1, 1, 1, clampf(_flash / 0.14, 0.0, 0.85)))
+
+	# Barre de vie du boss
+	if kind == Kind.BOSS and max_hp > 0:
+		var bw := 64.0
+		var by := -r - 16.0
+		var frac := clampf(float(hp) / max_hp, 0.0, 1.0)
+		draw_rect(Rect2(-bw * 0.5, by, bw, 7), Color(0, 0, 0, 0.65))
+		draw_rect(Rect2(-bw * 0.5, by, bw * frac, 7), Color(0.9, 0.3, 0.35))
+		draw_rect(Rect2(-bw * 0.5, by, bw, 7), Color(1, 1, 1, 0.55), false, 1.0)

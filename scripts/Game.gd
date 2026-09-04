@@ -15,6 +15,18 @@ const SAVE_PATH := "user://dungeon.cfg"
 
 enum State { TITLE, PLAYING, DEAD }
 
+## Succès (id, nom, description, compteur suivi, seuil).
+const ACHIEVEMENTS: Array = [
+	{"id": "kill1", "name": "Premier piège", "desc": "Éliminer un ennemi", "stat": "kills", "need": 1},
+	{"id": "kill50", "name": "Exterminateur", "desc": "Éliminer 50 ennemis", "stat": "kills", "need": 50},
+	{"id": "coins500", "name": "Magot", "desc": "Amasser 500 pièces au total", "stat": "coins", "need": 500},
+	{"id": "lvl5", "name": "Explorateur", "desc": "Atteindre le niveau 5", "stat": "best_level", "need": 5},
+	{"id": "lvl10", "name": "Vétéran", "desc": "Atteindre le niveau 10", "stat": "best_level", "need": 10},
+	{"id": "boss1", "name": "Chasseur de boss", "desc": "Vaincre un boss", "stat": "bosses", "need": 1},
+	{"id": "chest10", "name": "Pilleur", "desc": "Ouvrir 10 coffres", "stat": "chests", "need": 10},
+	{"id": "nodmg", "name": "Sans une égratignure", "desc": "Finir un niveau sans perdre de cœur", "stat": "nodmg", "need": 1},
+]
+
 ## Thèmes visuels (100% code). Chaque palette reskin le donjon.
 const PALETTES: Array = [
 	{
@@ -76,6 +88,7 @@ var enemies: Array[Enemy] = []
 var coins: Array[Coin] = []
 var powerups: Array[Powerup] = []
 var traps: Array[Trap] = []
+var chests: Array[Chest] = []
 var portal: Portal
 
 var player: Player
@@ -87,6 +100,9 @@ var coins_on_level := 0
 var best_score := 0
 var vibration_enabled := true
 var theme_idx := 0
+var _stats: Dictionary = {}          ## Compteurs cumulés (persistés)
+var _unlocked: Dictionary = {}       ## Succès débloqués (persistés)
+var _damage_free_level := true       ## Niveau en cours sans dégât ?
 
 # Éclairage / ambiance
 var _light_tex: GradientTexture2D
@@ -129,6 +145,11 @@ var vib_btn: Button
 var theme_btn: Button
 var gameover_root: Control
 var gameover_score: Label
+var achievements_root: Control
+var _ach_list: VBoxContainer
+var _toast_label: Label
+var _toast_queue: Array = []
+var _toast_active := false
 
 
 func _ready() -> void:
@@ -177,6 +198,7 @@ func _process(delta: float) -> void:
 				if player.health < hp:
 					add_shake(7.0)
 					_vibrate(120)
+					_damage_free_level = false
 				break
 
 	# Pièges dangereux -> blessent le joueur ET les ennemis
@@ -190,6 +212,7 @@ func _process(delta: float) -> void:
 			if player.health < hp2:
 				add_shake(6.0)
 				_vibrate(120)
+				_damage_free_level = false
 		var survivors: Array[Enemy] = []
 		for e in enemies:
 			if not is_instance_valid(e):
@@ -227,6 +250,7 @@ func start_game() -> void:
 
 func build_level() -> void:
 	_clear_level()
+	_apply_theme()          # met à jour le biome (mode Auto) avant de tout redessiner
 	_generate_walls()
 	_compute_reachable()
 	_build_wall_bodies()
@@ -271,8 +295,21 @@ func build_level() -> void:
 		var kind := Powerup.Kind.HEART if randf() < 0.6 else Powerup.Kind.SPEED
 		_spawn_powerup(free_cells.pop_back(), kind)
 
-	# Ennemis variés, loin du héros
-	var enemy_count := mini(3 + level, 10)
+	# Coffre (une chance sur deux environ)
+	if randf() < 0.6 and not free_cells.is_empty():
+		_spawn_chest(free_cells.pop_back())
+
+	# Boss tous les 5 niveaux
+	var is_boss_level := (level % 5 == 0)
+	if is_boss_level:
+		for c in free_cells:
+			if Vector2(c).distance_to(Vector2(SPAWN_CELL)) >= 6.0:
+				_spawn_boss(c)
+				free_cells.erase(c)
+				break
+
+	# Ennemis variés, loin du héros (moins nombreux les niveaux de boss)
+	var enemy_count := 3 if is_boss_level else mini(3 + level, 10)
 	var placed := 0
 	for c in free_cells:
 		if placed >= enemy_count:
@@ -285,7 +322,19 @@ func build_level() -> void:
 	queue_redraw()
 	_update_hud()
 	if state == State.PLAYING:
-		_flash("Niveau %d" % level)
+		_flash(_level_banner())
+		if level > int(_stats.get("best_level", 0)):
+			_stats["best_level"] = level
+		_damage_free_level = true
+		_check_achievements()
+
+
+func _level_banner() -> String:
+	if level % 5 == 0:
+		return "BOSS — Niveau %d" % level
+	if theme_idx >= PALETTES.size():
+		return "%s — Niveau %d" % [PALETTES[_effective_palette_index()]["name"], level]
+	return "Niveau %d" % level
 
 
 func _open_exit() -> void:
@@ -301,8 +350,31 @@ func _on_portal_entered() -> void:
 		return
 	Sfx.play(Sfx.level_up)
 	_vibrate(60)
+	if _damage_free_level:
+		_stat_add("nodmg", 1)
+		_check_achievements()
 	level += 1
 	build_level()
+
+
+func _on_chest_opened(pos: Vector2) -> void:
+	Sfx.play(Sfx.powerup)
+	_vibrate(50)
+	_burst(pos, Color(1.0, 0.85, 0.35), 22, 230.0, 0.6)
+	var roll := randf()
+	if roll < 0.4:
+		player.coins += 5
+		player.coins_changed.emit(player.coins)
+		_stat_add("coins", 5)
+		_flash("Coffre : +5 or !")
+	elif roll < 0.72:
+		player.heal(2)
+		_flash("Coffre : soin +2 !")
+	else:
+		player.grant_speed(8.0)
+		_flash("Coffre : vitesse !")
+	_stat_add("chests", 1)
+	_check_achievements()
 
 
 func _on_player_died() -> void:
@@ -327,9 +399,11 @@ func _on_player_died() -> void:
 func _on_coin_collected(pos: Vector2) -> void:
 	Sfx.play(Sfx.coin)
 	player.add_coin()
+	_stat_add("coins", 1)
 	coins_left -= 1
 	_burst(pos, Color(1.0, 0.85, 0.3), 8, 150.0, 0.4)
 	_update_hud()
+	_check_achievements()
 	if coins_left <= 0:
 		_open_exit()
 
@@ -347,12 +421,25 @@ func _on_powerup(kind: int) -> void:
 
 
 func _kill_enemy(e: Enemy) -> void:
-	_burst(e.global_position, e.body_color, 16, 260.0, 0.5)
+	var boss := e.kind == Enemy.Kind.BOSS
+	_burst(e.global_position, e.body_color, 26 if boss else 16, 300.0 if boss else 260.0, 0.6)
 	Sfx.play(Sfx.enemy_die)
-	player.coins += 2                 # bonus de score
+	if boss:
+		Sfx.play(Sfx.level_up)
+		player.coins += 25
+		add_shake(12.0)
+		_vibrate(200)
+		_flash("Boss vaincu !  +25")
+		_stat_add("coins", 25)
+		_stat_add("bosses", 1)
+	else:
+		player.coins += 2
+		add_shake(4.0)
+		_vibrate(25)
+		_stat_add("coins", 2)
 	player.coins_changed.emit(player.coins)
-	add_shake(4.0)
-	_vibrate(25)
+	_stat_add("kills", 1)
+	_check_achievements()
 	e.queue_free()
 
 
@@ -381,6 +468,10 @@ func _clear_level() -> void:
 		if is_instance_valid(t):
 			t.queue_free()
 	traps.clear()
+	for ch in chests:
+		if is_instance_valid(ch):
+			ch.queue_free()
+	chests.clear()
 	for lt in _torches:
 		if is_instance_valid(lt):
 			lt.queue_free()
@@ -565,6 +656,14 @@ func _spawn_trap(cell: Vector2i) -> void:
 	traps.append(t)
 
 
+func _spawn_chest(cell: Vector2i) -> void:
+	var ch := Chest.new()
+	ch.position = _cell_to_world(cell.x, cell.y)
+	ch.opened.connect(_on_chest_opened)
+	add_child(ch)
+	chests.append(ch)
+
+
 func _spawn_portal(cell: Vector2i) -> void:
 	portal = Portal.new()
 	portal.position = _cell_to_world(cell.x, cell.y)
@@ -581,6 +680,14 @@ func _spawn_enemy(cell: Vector2i) -> void:
 		kind = Enemy.Kind.FAST
 	elif level >= 3 and roll > 0.8:
 		kind = Enemy.Kind.TANK
+	_spawn_enemy_kind(cell, kind)
+
+
+func _spawn_boss(cell: Vector2i) -> void:
+	_spawn_enemy_kind(cell, Enemy.Kind.BOSS)
+
+
+func _spawn_enemy_kind(cell: Vector2i, kind: int) -> void:
 	var e := Enemy.new()
 	e.setup(kind, level)
 	e.position = _cell_to_world(cell.x, cell.y)
@@ -815,8 +922,19 @@ func _build_ui() -> void:
 	joystick = VirtualJoystick.new()
 	hud_root.add_child(joystick)
 
+	# Notification de succès (visible partout)
+	_toast_label = Label.new()
+	_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_toast_label.add_theme_font_size_override("font_size", 26)
+	_toast_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
+	_toast_label.size = Vector2(720, 40)
+	_toast_label.position = Vector2(0, 130)
+	_toast_label.visible = false
+	ui_layer.add_child(_toast_label)
+
 	_build_title_ui()
 	_build_gameover_ui()
+	_build_achievements_ui()
 
 
 func _build_vignette() -> void:
@@ -943,7 +1061,70 @@ func _build_title_ui() -> void:
 	vib_btn.pressed.connect(_toggle_vibration)
 	box.add_child(vib_btn)
 
+	var ach_btn := Button.new()
+	ach_btn.text = "Succès"
+	ach_btn.add_theme_font_size_override("font_size", 24)
+	ach_btn.custom_minimum_size = Vector2(300, 58)
+	ach_btn.focus_mode = Control.FOCUS_NONE
+	ach_btn.pressed.connect(_open_achievements)
+	box.add_child(ach_btn)
+
 	_refresh_best_labels()
+
+
+func _build_achievements_ui() -> void:
+	achievements_root = Control.new()
+	achievements_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	achievements_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	achievements_root.visible = false
+	ui_layer.add_child(achievements_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.03, 0.07, 0.9)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	achievements_root.add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	achievements_root.add_child(center)
+
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 14)
+	center.add_child(box)
+
+	var title := Label.new()
+	title.text = "SUCCÈS"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 48)
+	title.add_theme_color_override("font_color", Color(0.98, 0.82, 0.35))
+	box.add_child(title)
+
+	_ach_list = VBoxContainer.new()
+	_ach_list.add_theme_constant_override("separation", 8)
+	box.add_child(_ach_list)
+
+	var close := Button.new()
+	close.text = "  Fermer  "
+	close.add_theme_font_size_override("font_size", 28)
+	close.custom_minimum_size = Vector2(220, 64)
+	close.focus_mode = Control.FOCUS_NONE
+	close.pressed.connect(func(): achievements_root.visible = false)
+	box.add_child(close)
+
+
+func _open_achievements() -> void:
+	for c in _ach_list.get_children():
+		c.queue_free()
+	for a in ACHIEVEMENTS:
+		var done: bool = _unlocked.has(a["id"])
+		var l := Label.new()
+		l.text = ("[x]  " if done else "[  ]  ") + a["name"] + " — " + a["desc"]
+		l.add_theme_font_size_override("font_size", 20)
+		l.add_theme_color_override("font_color",
+			Color(1.0, 0.85, 0.4) if done else Color(0.5, 0.5, 0.56))
+		_ach_list.add_child(l)
+	achievements_root.visible = true
 
 
 func _build_gameover_ui() -> void:
@@ -1019,7 +1200,12 @@ func _load_prefs() -> void:
 	if cfg.load(SAVE_PATH) == OK:
 		best_score = int(cfg.get_value("score", "best", 0))
 		vibration_enabled = bool(cfg.get_value("options", "vibration", true))
-		theme_idx = clampi(int(cfg.get_value("options", "theme", 0)), 0, PALETTES.size() - 1)
+		theme_idx = clampi(int(cfg.get_value("options", "theme", 0)), 0, PALETTES.size())
+		var st = cfg.get_value("stats", "data", {})
+		if st is Dictionary:
+			_stats = st.duplicate()
+		for id in cfg.get_value("achievements", "unlocked", []):
+			_unlocked[id] = true
 
 
 func _save_prefs() -> void:
@@ -1027,13 +1213,66 @@ func _save_prefs() -> void:
 	cfg.set_value("score", "best", best_score)
 	cfg.set_value("options", "vibration", vibration_enabled)
 	cfg.set_value("options", "theme", theme_idx)
+	cfg.set_value("stats", "data", _stats)
+	cfg.set_value("achievements", "unlocked", _unlocked.keys())
 	cfg.save(SAVE_PATH)
 	_refresh_best_labels()
 
 
+func _stat_add(key: String, n: int) -> void:
+	_stats[key] = int(_stats.get(key, 0)) + n
+
+
+func _check_achievements() -> void:
+	var newly: Array = []
+	for a in ACHIEVEMENTS:
+		if _unlocked.has(a["id"]):
+			continue
+		if int(_stats.get(a["stat"], 0)) >= int(a["need"]):
+			_unlocked[a["id"]] = true
+			newly.append(a)
+	if not newly.is_empty():
+		_save_prefs()
+		for a in newly:
+			_queue_toast("Succès : " + a["name"])
+
+
+# ---------------------------------------------------------------------------
+# Notifications (toasts)
+# ---------------------------------------------------------------------------
+
+func _queue_toast(text: String) -> void:
+	_toast_queue.append(text)
+	if not _toast_active:
+		_show_next_toast()
+
+
+func _show_next_toast() -> void:
+	if _toast_queue.is_empty():
+		_toast_active = false
+		return
+	_toast_active = true
+	_toast_label.text = str(_toast_queue.pop_front())
+	_toast_label.visible = true
+	_toast_label.modulate = Color(1, 1, 1, 0)
+	_vibrate(30)
+	var tw := create_tween()
+	tw.tween_property(_toast_label, "modulate:a", 1.0, 0.25)
+	tw.tween_interval(1.7)
+	tw.tween_property(_toast_label, "modulate:a", 0.0, 0.4)
+	tw.tween_callback(_show_next_toast)
+
+
+## Indice de palette réellement utilisé (gère le mode "Auto" = biomes).
+func _effective_palette_index() -> int:
+	if theme_idx < PALETTES.size():
+		return theme_idx
+	return int((level - 1) / 2) % PALETTES.size()   # change de biome tous les 2 niveaux
+
+
 ## Copie la palette courante dans les variables de couleur (rapide pour _draw).
 func _unpack_theme() -> void:
-	var p: Dictionary = PALETTES[theme_idx]
+	var p: Dictionary = PALETTES[_effective_palette_index()]
 	_c_ambient = p["ambient"]
 	_c_floor_a = p["floor_a"]
 	_c_floor_b = p["floor_b"]
@@ -1062,7 +1301,7 @@ func _apply_theme() -> void:
 
 
 func _cycle_theme() -> void:
-	theme_idx = (theme_idx + 1) % PALETTES.size()
+	theme_idx = (theme_idx + 1) % (PALETTES.size() + 1)   # +1 pour le mode "Auto"
 	_apply_theme()
 	_save_prefs()
 	if theme_btn != null:
@@ -1070,6 +1309,8 @@ func _cycle_theme() -> void:
 
 
 func _theme_label() -> String:
+	if theme_idx >= PALETTES.size():
+		return "Thème : Auto (biomes)  »"
 	return "Thème : %s  »" % PALETTES[theme_idx]["name"]
 
 
