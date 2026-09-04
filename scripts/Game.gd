@@ -110,6 +110,8 @@ var _torch_phase: Array = []
 var _decor: Array[Node] = []      # particules d'ambiance à libérer entre niveaux
 var _time := 0.0
 var _shake := 0.0
+var _astar: AStarGrid2D
+var _path_timer := 0.0
 
 # Interface
 var ui_layer: CanvasLayer
@@ -157,6 +159,14 @@ func _process(delta: float) -> void:
 	if state != State.PLAYING:
 		return
 	player.joystick_vector = joystick.output
+
+	# Recalcule les chemins des ennemis à intervalle régulier
+	_path_timer -= delta
+	if _path_timer <= 0.0:
+		_path_timer = 0.4
+		_update_enemy_paths()
+
+	# Contact ennemi -> dégâts au joueur
 	for e in enemies:
 		if is_instance_valid(e):
 			var contact := Player.RADIUS + e.radius - 4.0
@@ -167,16 +177,34 @@ func _process(delta: float) -> void:
 					add_shake(7.0)
 					_vibrate(120)
 				break
+
+	# Pièges dangereux -> blessent le joueur ET les ennemis
 	for t in traps:
-		if is_instance_valid(t) and t.is_dangerous():
-			if absf(player.global_position.x - t.global_position.x) < 26.0 \
-					and absf(player.global_position.y - t.global_position.y) < 26.0:
-				var hp2 := player.health
-				player.take_damage(1)
-				if player.health < hp2:
-					add_shake(6.0)
-					_vibrate(120)
-				break
+		if not (is_instance_valid(t) and t.is_dangerous()):
+			continue
+		if absf(player.global_position.x - t.global_position.x) < 26.0 \
+				and absf(player.global_position.y - t.global_position.y) < 26.0:
+			var hp2 := player.health
+			player.take_damage(1)
+			if player.health < hp2:
+				add_shake(6.0)
+				_vibrate(120)
+		var survivors: Array[Enemy] = []
+		for e in enemies:
+			if not is_instance_valid(e):
+				continue
+			if absf(e.global_position.x - t.global_position.x) < 26.0 \
+					and absf(e.global_position.y - t.global_position.y) < 26.0:
+				var dir := e.global_position - t.global_position
+				if dir.length() < 0.01:
+					dir = Vector2.UP
+				if e.take_hit(dir):
+					_kill_enemy(e)
+				else:
+					survivors.append(e)
+			else:
+				survivors.append(e)
+		enemies = survivors
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +228,7 @@ func build_level() -> void:
 	_clear_level()
 	_generate_walls()
 	_build_wall_bodies()
+	_build_astar()
 	_place_torches()
 	_place_ambient_dust()
 
@@ -250,6 +279,7 @@ func build_level() -> void:
 			_spawn_enemy(c)
 			placed += 1
 
+	_update_enemy_paths()
 	queue_redraw()
 	_update_hud()
 	if state == State.PLAYING:
@@ -560,6 +590,7 @@ func _spawn_enemy(cell: Vector2i) -> void:
 
 func _create_player() -> void:
 	player = Player.new()
+	player.z_index = 3   # le héros est toujours au premier plan
 	player.died.connect(_on_player_died)
 	player.attacked.connect(_on_player_attacked)
 	player.health_changed.connect(func(_c, _m): _update_hud())
@@ -589,6 +620,45 @@ func _create_player() -> void:
 
 func _cell_to_world(x: int, y: int) -> Vector2:
 	return Vector2(x * TILE + TILE * 0.5, y * TILE + TILE * 0.5)
+
+
+func _world_to_cell(pos: Vector2) -> Vector2i:
+	return Vector2i(
+		clampi(int(pos.x / TILE), 0, COLS - 1),
+		clampi(int(pos.y / TILE), 0, ROWS - 1))
+
+
+func _build_astar() -> void:
+	_astar = AStarGrid2D.new()
+	_astar.region = Rect2i(0, 0, COLS, ROWS)
+	_astar.cell_size = Vector2(TILE, TILE)
+	_astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	_astar.update()
+	for y in ROWS:
+		for x in COLS:
+			if walls[y][x]:
+				_astar.set_point_solid(Vector2i(x, y), true)
+
+
+## Recalcule le chemin de chaque ennemi vers le joueur (contourne les murs).
+func _update_enemy_paths() -> void:
+	if state != State.PLAYING or _astar == null or player == null:
+		return
+	var pc := _world_to_cell(player.global_position)
+	if _astar.is_point_solid(pc):
+		return
+	for e in enemies:
+		if not is_instance_valid(e):
+			continue
+		var ec := _world_to_cell(e.global_position)
+		if _astar.is_point_solid(ec):
+			e.set_path(PackedVector2Array())
+			continue
+		var cells := _astar.get_id_path(ec, pc)
+		var pts := PackedVector2Array()
+		for i in range(1, cells.size()):   # on saute la case courante
+			pts.append(_cell_to_world(cells[i].x, cells[i].y))
+		e.set_path(pts)
 
 
 # ---------------------------------------------------------------------------

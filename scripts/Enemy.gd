@@ -18,6 +18,10 @@ var target: Node2D
 var _knockback := Vector2.ZERO
 var _flash := 0.0
 var _wobble := 0.0
+var _hit_cd := 0.0                        ## Anti multi-coups (pièges surtout)
+
+var path: PackedVector2Array = PackedVector2Array()  ## Chemin A* (points monde)
+var path_i := 0
 
 
 func setup(new_kind: int, level: int) -> void:
@@ -43,6 +47,7 @@ func setup(new_kind: int, level: int) -> void:
 func _ready() -> void:
 	collision_layer = 4
 	collision_mask = 1
+	z_index = 2   # au-dessus du sol/pièges, sous le héros
 	var shape := CircleShape2D.new()
 	shape.radius = radius
 	var cs := CollisionShape2D.new()
@@ -52,11 +57,27 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	_wobble += delta * 6.0
+	if _hit_cd > 0.0:
+		_hit_cd -= delta
+
+	# Suit le chemin A* (contourne les murs) ; sinon fonce vers la cible
+	var goal := Vector2.ZERO
+	var have_goal := false
+	if path.size() > 0:
+		while path_i < path.size() and global_position.distance_to(path[path_i]) < 12.0:
+			path_i += 1
+		if path_i < path.size():
+			goal = path[path_i]
+			have_goal = true
+	if not have_goal and target != null and is_instance_valid(target):
+		goal = target.global_position
+		have_goal = true
+
 	var chase := Vector2.ZERO
-	if target != null and is_instance_valid(target):
-		var to_target := target.global_position - global_position
-		if to_target.length() > 1.0:
-			chase = to_target.normalized() * speed
+	if have_goal:
+		var to_goal := goal - global_position
+		if to_goal.length() > 1.0:
+			chase = to_goal.normalized() * speed
 	velocity = chase + _knockback
 	_knockback = _knockback.move_toward(Vector2.ZERO, 1400.0 * delta)
 	move_and_slide()
@@ -65,8 +86,16 @@ func _physics_process(delta: float) -> void:
 	queue_redraw()
 
 
-## Encaisse un coup. Renvoie true si l'ennemi meurt.
+func set_path(pts: PackedVector2Array) -> void:
+	path = pts
+	path_i = 0
+
+
+## Encaisse un coup. Renvoie true si l'ennemi meurt (false si en cooldown).
 func take_hit(from_dir: Vector2) -> bool:
+	if _hit_cd > 0.0:
+		return false
+	_hit_cd = 0.3
 	hp -= 1
 	_flash = 0.14
 	_knockback = from_dir.normalized() * 420.0
