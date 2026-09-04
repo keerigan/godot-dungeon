@@ -63,7 +63,7 @@ Un **workflow GitHub Actions** (`.github/workflows/android.yml`) compile l'APK
 automatiquement à chaque push sur `main`. Pour l'installer sur ton téléphone :
 
 1. Ouvre l'onglet **Releases** du dépôt → release **« latest »**.
-2. Télécharge `godot-dungeon.apk`.
+2. Télécharge `gloomrunner.apk`.
 3. Autorise l'installation depuis cette source, puis ouvre le fichier.
 
 > Tu peux aussi lancer le build à la main : onglet **Actions** →

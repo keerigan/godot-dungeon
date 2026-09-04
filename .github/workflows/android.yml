@@ -16,7 +16,7 @@ permissions:
 env:
   GODOT_VERSION: "4.3"
   EXPORT_PRESET: "Android"
-  APK_NAME: "godot-dungeon.apk"
+  APK_NAME: "gloomrunner.apk"
 
 jobs:
   build:
@@ -94,7 +94,7 @@ jobs:
       - name: Publier l'artefact du run
         uses: actions/upload-artifact@v4
         with:
-          name: godot-dungeon-apk
+          name: gloomrunner-apk
           path: build/${{ env.APK_NAME }}
           if-no-files-found: error
 
