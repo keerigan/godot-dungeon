@@ -105,6 +105,10 @@ func take_hit(from_dir: Vector2) -> bool:
 func _draw() -> void:
 	var squash := 1.0 + sin(_wobble) * 0.06
 	var r := radius
+	# Ombre douce au sol
+	draw_set_transform(Vector2(0, r * 0.82), 0.0, Vector2(1.0, 0.42))
+	draw_circle(Vector2.ZERO, r * 0.85, Color(0, 0, 0, 0.30))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	# Corps
 	draw_circle(Vector2.ZERO, r, body_color)
 	draw_arc(Vector2.ZERO, r, 0.0, TAU, 28, body_color.darkened(0.4), 3.0)

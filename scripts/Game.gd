@@ -490,6 +490,12 @@ func _place_torches() -> void:
 		em.color = Color(_c_torch.r, _c_torch.g, _c_torch.b, 0.85)
 		add_child(em)
 		_decor.append(em)
+		# Flamme visible
+		var fl := Flame.new()
+		fl.position = pos + Vector2(0, -4)
+		fl.tint = _c_torch
+		add_child(fl)
+		_decor.append(fl)
 
 
 func _place_ambient_dust() -> void:

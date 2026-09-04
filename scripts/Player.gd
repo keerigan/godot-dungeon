@@ -122,6 +122,11 @@ func reset() -> void:
 	queue_redraw()
 
 func _draw() -> void:
+	# Ombre douce au sol
+	draw_set_transform(Vector2(0, RADIUS * 0.85), 0.0, Vector2(1.0, 0.42))
+	draw_circle(Vector2.ZERO, RADIUS * 0.85, Color(0, 0, 0, 0.30))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
 	# Effet de coup : arc lumineux devant le héros
 	if attack_anim > 0.0:
 		var progress := 1.0 - attack_anim / ATTACK_ANIM
