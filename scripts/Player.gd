@@ -27,6 +27,9 @@ var body_color := Color(0.95, 0.85, 0.30) ## Couleur du héros (skin)
 var rim_color := Color(0.35, 0.30, 0.10)  ## Contour du héros (skin)
 var trail_color := Color(1.0, 0.8, 0.3)   ## Couleur de la traînée (skin)
 var shape := "orbe"                        ## Forme du personnage (skin)
+var speed_mult := 1.0                       ## Multiplicateur de vitesse (bonus skin)
+var invuln_time := 1.0                       ## Durée d'invincibilité après un coup (bonus skin)
+var phase := false                           ## Traverse les murs (bonus skin)
 
 func _ready() -> void:
 	collision_layer = 2   # Le joueur est sur la "couche 2"
@@ -54,7 +57,7 @@ func _physics_process(delta: float) -> void:
 	if dir.length() > 0.1:
 		facing = dir.normalized()
 		_bob += delta * 12.0
-	var spd := SPEED * (1.6 if speed_boost > 0.0 else 1.0)
+	var spd := SPEED * speed_mult * (1.6 if speed_boost > 0.0 else 1.0)
 	velocity = dir * spd
 	move_and_slide()
 
@@ -81,7 +84,7 @@ func take_damage(amount: int) -> void:
 	if shield > 0.0 or invuln > 0.0:
 		return
 	health = max(0, health - amount)
-	invuln = 1.0
+	invuln = invuln_time
 	Sfx.play(Sfx.hurt)
 	health_changed.emit(health, max_health)
 	queue_redraw()

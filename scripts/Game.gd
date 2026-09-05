@@ -159,26 +159,26 @@ var _combo_timer := 0.0              ## Temps avant expiration du combo
 
 # Skins (apparence de la lueur, achetés avec l'or)
 const SKINS: Array = [
-	{"id": "or", "name": "Lueur dorée", "shape": "orbe", "price": 0,
+	{"id": "or", "name": "Lueur dorée", "shape": "orbe", "price": 0, "perk": "",
 	 "body": Color(0.95, 0.85, 0.30), "rim": Color(0.35, 0.30, 0.10), "trail": Color(1.0, 0.8, 0.35)},
-	{"id": "cyan", "name": "Robot", "shape": "robot", "price": 120,
+	{"id": "cyan", "name": "Robot", "shape": "robot", "price": 120, "perk": "heart",
 	 "body": Color(0.55, 0.9, 1.0), "rim": Color(0.12, 0.32, 0.42), "trail": Color(0.4, 0.85, 1.0)},
-	{"id": "violet", "name": "Fantôme", "shape": "fantome", "price": 180,
+	{"id": "violet", "name": "Fantôme", "shape": "fantome", "price": 180, "perk": "phase",
 	 "body": Color(0.74, 0.56, 1.0), "rim": Color(0.26, 0.16, 0.42), "trail": Color(0.66, 0.46, 1.0)},
-	{"id": "emeraude", "name": "Slime", "shape": "slime", "price": 240,
+	{"id": "emeraude", "name": "Slime", "shape": "slime", "price": 240, "perk": "shield",
 	 "body": Color(0.46, 0.95, 0.62), "rim": Color(0.12, 0.36, 0.22), "trail": Color(0.42, 0.95, 0.62)},
-	{"id": "rose", "name": "Chaton", "shape": "chat", "price": 320,
+	{"id": "rose", "name": "Chaton", "shape": "chat", "price": 320, "perk": "speed",
 	 "body": Color(1.0, 0.56, 0.82), "rim": Color(0.4, 0.16, 0.3), "trail": Color(1.0, 0.5, 0.8)},
-	{"id": "spectre", "name": "Chevalier", "shape": "chevalier", "price": 500,
+	{"id": "spectre", "name": "Chevalier", "shape": "chevalier", "price": 500, "perk": "armor",
 	 "body": Color(0.9, 0.93, 1.0), "rim": Color(0.42, 0.47, 0.57), "trail": Color(0.9, 0.95, 1.0)},
-	{"id": "crane", "name": "Crâne", "shape": "crane", "price": 450,
+	{"id": "crane", "name": "Crâne", "shape": "crane", "price": 450, "perk": "greed",
 	 "body": Color(0.9, 0.9, 0.93), "rim": Color(0.32, 0.32, 0.38), "trail": Color(0.75, 0.75, 0.85)},
-	{"id": "ninja", "name": "Ninja", "shape": "ninja", "price": 600,
+	{"id": "ninja", "name": "Ninja", "shape": "ninja", "price": 600, "perk": "swift",
 	 "body": Color(0.26, 0.28, 0.36), "rim": Color(0.06, 0.06, 0.1), "trail": Color(0.55, 0.6, 0.8)},
-	{"id": "dragon", "name": "Dragon", "shape": "dragon", "price": 800,
+	{"id": "dragon", "name": "Dragon", "shape": "dragon", "price": 800, "perk": "trapproof",
 	 "body": Color(0.95, 0.42, 0.2), "rim": Color(0.4, 0.12, 0.05), "trail": Color(1.0, 0.6, 0.2),
 	 "trail_type": "spark"},
-	{"id": "prisme", "name": "Prisme arc-en-ciel", "shape": "prisme", "price": 1000,
+	{"id": "prisme", "name": "Prisme arc-en-ciel", "shape": "prisme", "price": 1000, "perk": "fortune",
 	 "body": Color(0.86, 0.9, 1.0), "rim": Color(0.5, 0.55, 0.7), "trail": Color(1.0, 1.0, 1.0),
 	 "trail_type": "rainbow"},
 ]
@@ -298,6 +298,12 @@ func _process(delta: float) -> void:
 		return
 	player.joystick_vector = joystick.output
 
+	# Le Fantôme traverse les murs : on le garde dans l'enceinte de l'arène
+	if player.phase:
+		var r := Player.RADIUS
+		player.global_position.x = clampf(player.global_position.x, TILE + r, MAP_W - TILE - r)
+		player.global_position.y = clampf(player.global_position.y, TILE + r, MAP_H - TILE - r)
+
 	# Recalcule les chemins des ennemis à intervalle régulier
 	_path_timer -= delta
 	if _path_timer <= 0.0:
@@ -359,7 +365,8 @@ func _process(delta: float) -> void:
 	for t in traps:
 		if not (is_instance_valid(t) and t.is_dangerous()):
 			continue
-		if absf(player.global_position.x - t.global_position.x) < 26.0 \
+		if _skin_perk() != "trapproof" \
+				and absf(player.global_position.x - t.global_position.x) < 26.0 \
 				and absf(player.global_position.y - t.global_position.y) < 26.0:
 			var hp2 := player.health
 			player.take_damage(1)
@@ -402,7 +409,7 @@ func start_game() -> void:
 	_exit_arrow.enabled = true
 	level = 1
 	player.coins = 0
-	player.max_health = 5 + up_hearts     # amélioration boutique
+	player.max_health = 5 + up_hearts + (1 if _skin_perk() == "heart" else 0)
 	held_item = ""
 	_refresh_item_button()
 	_run_kills = 0
@@ -428,8 +435,8 @@ func build_level() -> void:
 	player.global_position = _cell_to_world(SPAWN_CELL.x, SPAWN_CELL.y)
 	player.reset()
 	player.visible = (state == State.PLAYING)
-	if state == State.PLAYING and up_shield:
-		player.grant_shield(4.0)   # amélioration boutique : bouclier de départ
+	if state == State.PLAYING and (up_shield or _skin_perk() == "shield"):
+		player.grant_shield(4.0)   # boutique ou bonus du Slime
 
 	var free_cells := _free_cells()
 	free_cells.shuffle()
@@ -593,6 +600,8 @@ func _on_coin_collected(pos: Vector2) -> void:
 	var mult := _combo_mult()
 	if mult > 1:
 		player.coins += mult - 1
+	if _skin_perk() == "greed":
+		player.coins += 1              # bonus du Crâne
 	_run_coins_collected += 1
 	_stat_add("coins", 1)
 	coins_left -= 1
@@ -1687,6 +1696,25 @@ func _skin_by_id(id: String) -> Dictionary:
 	return SKINS[0]
 
 
+## Bonus du skin sélectionné (voir SKINS / _perk_desc).
+func _skin_perk() -> String:
+	return str(_skin_by_id(current_skin).get("perk", ""))
+
+
+func _perk_desc(perk: String) -> String:
+	match perk:
+		"heart": return "+1 cœur max"
+		"phase": return "traverse les murs"
+		"shield": return "bouclier à chaque niveau"
+		"speed": return "+12% de vitesse"
+		"swift": return "+20% de vitesse"
+		"armor": return "invincibilité prolongée"
+		"greed": return "+1 or par pièce"
+		"trapproof": return "insensible aux pièges"
+		"fortune": return "+25% d'or en banque"
+	return ""
+
+
 func _apply_skin() -> void:
 	var s := _skin_by_id(current_skin)
 	if player != null:
@@ -1694,6 +1722,12 @@ func _apply_skin() -> void:
 		player.rim_color = s["rim"]
 		player.trail_color = s["trail"]
 		player.shape = s.get("shape", "orbe")
+		# Bonus passifs
+		var perk := str(s.get("perk", ""))
+		player.phase = perk == "phase"
+		player.collision_mask = 0 if player.phase else 1
+		player.speed_mult = 1.12 if perk == "speed" else (1.20 if perk == "swift" else 1.0)
+		player.invuln_time = 1.8 if perk == "armor" else 1.0
 		player.queue_redraw()
 	if _player_trail != null:
 		var t: Color = s["trail"]
@@ -1797,11 +1831,15 @@ func _open_skins() -> void:
 			suffix = "   —   Choisir"
 		else:
 			suffix = "   —   %d or" % price
-		b.text = s["name"] + suffix
-		b.add_theme_font_size_override("font_size", 22)
-		b.custom_minimum_size = Vector2(460, 62)
+		var perk_txt := _perk_desc(str(s.get("perk", "")))
+		var name_txt: String = s["name"]
+		if perk_txt != "":
+			name_txt += "  (" + perk_txt + ")"
+		b.text = name_txt + suffix
+		b.add_theme_font_size_override("font_size", 20)
+		b.custom_minimum_size = Vector2(500, 62)
 		b.focus_mode = Control.FOCUS_NONE
-		b.add_theme_color_override("font_color", s["body"])
+		b.add_theme_color_override("font_color", (s["body"] as Color).lerp(Color.WHITE, 0.3))
 		b.disabled = selected or (not owned and gold < price)
 		b.pressed.connect(_skin_action.bind(id))
 		_skins_list.add_child(b)
@@ -2055,7 +2093,10 @@ func _refresh_best_labels() -> void:
 
 func _bank_run() -> void:
 	if player.coins > 0:
-		gold += player.coins
+		var banked := player.coins
+		if _skin_perk() == "fortune":
+			banked = int(ceil(banked * 1.25))   # bonus du Prisme
+		gold += banked
 		player.coins = 0
 		_save_prefs()
 

@@ -43,10 +43,14 @@ esquivant des monstres qui te traquent — sans jamais attaquer.
   notifications.
 - **Combo / frôlements** : esquiver un ennemi de justesse enchaîne un combo qui
   **multiplie le score** (jusqu'à x5) — récompense la prise de risque.
-- **Apparences à débloquer** : 10 **personnages** (orbe, robot, fantôme, slime,
-  chaton, chevalier, crâne, ninja, dragon, prisme), chacun avec sa couleur et sa
-  traînée — dont des **traînées spéciales** (étincelles du dragon, arc-en-ciel
-  du prisme). Achetables avec l'or, au choix sur l'écran-titre.
+- **Apparences à débloquer** : 10 **personnages**, chacun avec sa couleur, sa
+  traînée (dont des **traînées spéciales** : étincelles du dragon, arc-en-ciel
+  du prisme) **et un bonus de jeu** :
+  - Robot : +1 cœur max · Fantôme : traverse les murs · Slime : bouclier à
+    chaque niveau · Chaton : +12 % vitesse · Ninja : +20 % vitesse ·
+    Chevalier : invincibilité prolongée · Crâne : +1 or par pièce · Dragon :
+    insensible aux pièges · Prisme : +25 % d'or en banque.
+  Achetables avec l'or, au choix sur l'écran-titre.
 - **Bilan de fin de partie** : score, pièces, frôlements, ennemis, coffres et
   record battu.
 - **Tutoriel** au premier lancement + **récompense de connexion quotidienne**
