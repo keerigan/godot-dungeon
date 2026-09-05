@@ -113,6 +113,21 @@ de release depuis les *GitHub Secrets* (jamais commité).
 > captures d'écran, description, **politique de confidentialité** (URL) et le
 > questionnaire de classification de contenu.
 
+### Succès Google Play (optionnel)
+
+Le point d'intégration est déjà en place (`scripts/PlayGames.gd`, chargé en
+autoload) : c'est un wrapper **tolérant** qui ne fait rien tant que le plugin
+natif n'est pas installé — le jeu marche à l'identique en attendant. Les 8
+succès **en jeu** (hors-ligne) restent la référence ; Play Games ne fait que
+les refléter dans le compte Google.
+
+Pour l'activer une fois le compte Play prêt (étapes détaillées en tête de
+`PlayGames.gd`) : activer *Play Games Services* sur la Console, déclarer les
+succès et reporter leurs identifiants dans `ACHIEVEMENT_IDS`, puis ajouter un
+plugin Android Play Games Services (`.aar` + `.gdap`) au build Gradle. Le bouton
+**« Succès Google Play »** de l'écran-titre n'apparaît que si le plugin est
+présent.
+
 ---
 
 ## 🚀 Ouvrir le projet

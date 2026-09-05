@@ -1496,6 +1496,16 @@ func _build_title_ui() -> void:
 	ach_btn.pressed.connect(_open_achievements)
 	box.add_child(ach_btn)
 
+	# Succès Google Play : visible seulement si le plugin natif est présent
+	var play_ach_btn := Button.new()
+	play_ach_btn.text = "Succès Google Play"
+	play_ach_btn.add_theme_font_size_override("font_size", 24)
+	play_ach_btn.custom_minimum_size = Vector2(300, 58)
+	play_ach_btn.focus_mode = Control.FOCUS_NONE
+	play_ach_btn.visible = PlayGames.is_available()
+	play_ach_btn.pressed.connect(func(): PlayGames.show_achievements())
+	box.add_child(play_ach_btn)
+
 	var shop_btn := Button.new()
 	shop_btn.text = "Boutique"
 	shop_btn.add_theme_font_size_override("font_size", 24)
@@ -2195,6 +2205,7 @@ func _check_achievements() -> void:
 		_save_prefs()
 		for a in newly:
 			_queue_toast("Succès : " + a["name"])
+			PlayGames.unlock(a["id"])   # reflète le succès dans Google Play (no-op si absent)
 
 
 # ---------------------------------------------------------------------------

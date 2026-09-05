@@ -16,6 +16,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 Sfx="*res://scripts/Sfx.gd"
+PlayGames="*res://scripts/PlayGames.gd"
 
 [display]
 
