@@ -171,10 +171,21 @@ const SKINS: Array = [
 	 "body": Color(1.0, 0.56, 0.82), "rim": Color(0.4, 0.16, 0.3), "trail": Color(1.0, 0.5, 0.8)},
 	{"id": "spectre", "name": "Chevalier", "shape": "chevalier", "price": 500,
 	 "body": Color(0.9, 0.93, 1.0), "rim": Color(0.42, 0.47, 0.57), "trail": Color(0.9, 0.95, 1.0)},
+	{"id": "crane", "name": "Crâne", "shape": "crane", "price": 450,
+	 "body": Color(0.9, 0.9, 0.93), "rim": Color(0.32, 0.32, 0.38), "trail": Color(0.75, 0.75, 0.85)},
+	{"id": "ninja", "name": "Ninja", "shape": "ninja", "price": 600,
+	 "body": Color(0.26, 0.28, 0.36), "rim": Color(0.06, 0.06, 0.1), "trail": Color(0.55, 0.6, 0.8)},
+	{"id": "dragon", "name": "Dragon", "shape": "dragon", "price": 800,
+	 "body": Color(0.95, 0.42, 0.2), "rim": Color(0.4, 0.12, 0.05), "trail": Color(1.0, 0.6, 0.2),
+	 "trail_type": "spark"},
+	{"id": "prisme", "name": "Prisme arc-en-ciel", "shape": "prisme", "price": 1000,
+	 "body": Color(0.86, 0.9, 1.0), "rim": Color(0.5, 0.55, 0.7), "trail": Color(1.0, 1.0, 1.0),
+	 "trail_type": "rainbow"},
 ]
 var owned_skins: Dictionary = {"or": true}   ## Skins débloqués
 var current_skin := "or"                      ## Skin sélectionné
 var _player_trail: CPUParticles2D             ## Traînée du héros (couleur du skin)
+var _trail_rainbow := false                    ## Traînée arc-en-ciel (couleur animée)
 
 # Connexion quotidienne
 var login_streak := 0                ## Jours de connexion consécutifs
@@ -279,6 +290,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
+	if _trail_rainbow and _player_trail != null:
+		_player_trail.color = Color.from_hsv(fmod(_time * 0.35, 1.0), 0.75, 1.0, 0.55)
 	_animate_torches()
 	_apply_shake(delta)
 	if state != State.PLAYING:
@@ -1674,7 +1687,40 @@ func _apply_skin() -> void:
 		player.queue_redraw()
 	if _player_trail != null:
 		var t: Color = s["trail"]
-		_player_trail.color = Color(t.r, t.g, t.b, 0.45)
+		var tt := str(s.get("trail_type", "normal"))
+		_trail_rainbow = tt == "rainbow"
+		_player_trail.gravity = Vector2.ZERO
+		_player_trail.direction = Vector2.ZERO
+		match tt:
+			"spark":
+				# Étincelles : plus de particules, qui jaillissent et montent
+				_player_trail.amount = 32
+				_player_trail.lifetime = 0.6
+				_player_trail.spread = 45.0
+				_player_trail.gravity = Vector2(0, -40)
+				_player_trail.initial_velocity_min = 8.0
+				_player_trail.initial_velocity_max = 30.0
+				_player_trail.scale_amount_min = 1.5
+				_player_trail.scale_amount_max = 5.0
+				_player_trail.color = Color(t.r, t.g, t.b, 0.6)
+			"rainbow":
+				_player_trail.amount = 28
+				_player_trail.lifetime = 0.55
+				_player_trail.spread = 8.0
+				_player_trail.initial_velocity_min = 0.0
+				_player_trail.initial_velocity_max = 0.0
+				_player_trail.scale_amount_min = 2.5
+				_player_trail.scale_amount_max = 4.5
+				# couleur animée dans _process
+			_:
+				_player_trail.amount = 20
+				_player_trail.lifetime = 0.5
+				_player_trail.spread = 6.0
+				_player_trail.initial_velocity_min = 0.0
+				_player_trail.initial_velocity_max = 0.0
+				_player_trail.scale_amount_min = 2.5
+				_player_trail.scale_amount_max = 4.5
+				_player_trail.color = Color(t.r, t.g, t.b, 0.45)
 
 
 func _build_skins_ui() -> void:

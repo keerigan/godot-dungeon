@@ -144,6 +144,10 @@ func _draw() -> void:
 		"slime": _draw_slime(c)
 		"chat": _draw_cat(c)
 		"chevalier": _draw_knight(c)
+		"dragon": _draw_dragon(c)
+		"crane": _draw_skull(c)
+		"ninja": _draw_ninja(c)
+		"prisme": _draw_gem(c)
 		_: _draw_orbe(c)
 
 
@@ -253,3 +257,85 @@ func _draw_knight(c: Vector2) -> void:
 	draw_line(c + Vector2(-6, -3), c + Vector2(-6, 4), body_color.lightened(0.6), 2.5)
 	draw_line(c + Vector2(6, -3), c + Vector2(6, 4), body_color.lightened(0.6), 2.5)
 	draw_line(c + Vector2(0, -RADIUS), c + Vector2(0, -5), rim_color, 2.0)
+
+
+func _draw_dragon(c: Vector2) -> void:
+	# Cornes
+	var horn_col := body_color.lightened(0.35)
+	var hornL := PackedVector2Array([
+		c + Vector2(-RADIUS * 0.55, -RADIUS * 0.6),
+		c + Vector2(-RADIUS * 0.95, -RADIUS * 1.3),
+		c + Vector2(-RADIUS * 0.2, -RADIUS * 0.85)])
+	var hornR := PackedVector2Array([
+		c + Vector2(RADIUS * 0.55, -RADIUS * 0.6),
+		c + Vector2(RADIUS * 0.95, -RADIUS * 1.3),
+		c + Vector2(RADIUS * 0.2, -RADIUS * 0.85)])
+	draw_colored_polygon(hornL, horn_col)
+	draw_colored_polygon(hornR, horn_col)
+	draw_circle(c, RADIUS, body_color)
+	draw_arc(c, RADIUS, 0.0, TAU, 32, rim_color, 3.0)
+	# Sourcils fâchés + yeux
+	var eye_col := Color(0.12, 0.05, 0.03)
+	draw_line(c + Vector2(-12, -8), c + Vector2(-3, -4), eye_col, 2.5)
+	draw_line(c + Vector2(12, -8), c + Vector2(3, -4), eye_col, 2.5)
+	draw_circle(c + Vector2(-7, -2), 3.0, Color(1, 0.9, 0.4))
+	draw_circle(c + Vector2(7, -2), 3.0, Color(1, 0.9, 0.4))
+	draw_circle(c + Vector2(-7, -2), 1.3, eye_col)
+	draw_circle(c + Vector2(7, -2), 1.3, eye_col)
+	# Naseaux
+	draw_circle(c + Vector2(-4, 7), 1.6, rim_color)
+	draw_circle(c + Vector2(4, 7), 1.6, rim_color)
+	# Crocs
+	draw_colored_polygon(PackedVector2Array([
+		c + Vector2(-6, 11), c + Vector2(-3, 11), c + Vector2(-4.5, 16)]), Color(1, 1, 0.95))
+	draw_colored_polygon(PackedVector2Array([
+		c + Vector2(6, 11), c + Vector2(3, 11), c + Vector2(4.5, 16)]), Color(1, 1, 0.95))
+
+
+func _draw_skull(c: Vector2) -> void:
+	draw_circle(c, RADIUS, body_color)
+	draw_arc(c, RADIUS, 0.0, TAU, 32, rim_color, 3.0)
+	var dark := Color(0.1, 0.1, 0.14)
+	# Orbites
+	draw_circle(c + Vector2(-6, -3), 4.4, dark)
+	draw_circle(c + Vector2(6, -3), 4.4, dark)
+	# Nez
+	draw_colored_polygon(PackedVector2Array([
+		c + Vector2(0, 2), c + Vector2(-2.6, 8), c + Vector2(2.6, 8)]), dark)
+	# Dents
+	var y := RADIUS * 0.6
+	draw_line(c + Vector2(-8, y - 4), c + Vector2(8, y - 4), rim_color, 1.5)
+	for tx in [-6, -2, 2, 6]:
+		draw_line(c + Vector2(tx, y - 4), c + Vector2(tx, y + 2), rim_color, 1.5)
+
+
+func _draw_ninja(c: Vector2) -> void:
+	draw_circle(c, RADIUS, body_color)   # capuche sombre
+	draw_arc(c, RADIUS, 0.0, TAU, 32, rim_color, 3.0)
+	# Bandeau (bande de peau visible sur les yeux)
+	var strip := Rect2(c + Vector2(-RADIUS * 0.92, -6.0), Vector2(RADIUS * 1.84, 11.0))
+	draw_rect(strip, Color(0.93, 0.82, 0.68))
+	# Yeux
+	draw_circle(c + Vector2(-6, -1), 2.4, Color(0.1, 0.1, 0.14))
+	draw_circle(c + Vector2(6, -1), 2.4, Color(0.1, 0.1, 0.14))
+	# Nœud + rubans du bandeau (à droite)
+	draw_line(c + Vector2(RADIUS * 0.8, -1), c + Vector2(RADIUS * 1.35, -6), rim_color, 3.0)
+	draw_line(c + Vector2(RADIUS * 0.8, 1), c + Vector2(RADIUS * 1.35, 6), rim_color, 3.0)
+
+
+func _draw_gem(c: Vector2) -> void:
+	var pts := PackedVector2Array([
+		c + Vector2(0, -RADIUS),
+		c + Vector2(RADIUS * 0.82, -RADIUS * 0.15),
+		c + Vector2(0, RADIUS),
+		c + Vector2(-RADIUS * 0.82, -RADIUS * 0.15)])
+	draw_colored_polygon(pts, body_color)
+	# Contour fermé
+	var outline := pts.duplicate()
+	outline.append(pts[0])
+	draw_polyline(outline, rim_color, 2.0)
+	# Facettes
+	draw_line(c + Vector2(-RADIUS * 0.82, -RADIUS * 0.15), c + Vector2(RADIUS * 0.82, -RADIUS * 0.15),
+		body_color.lightened(0.4), 1.5)
+	draw_line(c + Vector2(0, -RADIUS), c + Vector2(0, RADIUS), body_color.lightened(0.25), 1.2)
+	draw_circle(c + Vector2(-5, -6), 2.4, Color(1, 1, 1, 0.8))
