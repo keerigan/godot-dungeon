@@ -43,8 +43,9 @@ esquivant des monstres qui te traquent — sans jamais attaquer.
   notifications.
 - **Combo / frôlements** : esquiver un ennemi de justesse enchaîne un combo qui
   **multiplie le score** (jusqu'à x5) — récompense la prise de risque.
-- **Apparences à débloquer** : plusieurs couleurs de la lueur (avec traînée
-  assortie) achetables avec l'or, au choix sur l'écran-titre.
+- **Apparences à débloquer** : plusieurs **personnages** (orbe, robot, fantôme,
+  slime, chaton, chevalier), chacun avec sa couleur et sa traînée, achetables
+  avec l'or et au choix sur l'écran-titre.
 - **Bilan de fin de partie** : score, pièces, frôlements, ennemis, coffres et
   record battu.
 - **Tutoriel** au premier lancement + **récompense de connexion quotidienne**

@@ -26,6 +26,7 @@ var _blink_cd := 3.0                      ## Délai avant le prochain clignement
 var body_color := Color(0.95, 0.85, 0.30) ## Couleur du héros (skin)
 var rim_color := Color(0.35, 0.30, 0.10)  ## Contour du héros (skin)
 var trail_color := Color(1.0, 0.8, 0.3)   ## Couleur de la traînée (skin)
+var shape := "orbe"                        ## Forme du personnage (skin)
 
 func _ready() -> void:
 	collision_layer = 2   # Le joueur est sur la "couche 2"
@@ -137,11 +138,17 @@ func _draw() -> void:
 		return
 
 	var c := Vector2(0, sin(_bob) * 2.0)   # léger balancement
-	draw_circle(c, RADIUS, body_color)
-	draw_arc(c, RADIUS, 0.0, TAU, 32, rim_color, 3.0)
-	# Reflet doux
-	draw_circle(c + Vector2(-6, -8), 5.0, body_color.lightened(0.5))
-	# Yeux (fermés pendant le clignement)
+	match shape:
+		"fantome": _draw_ghost(c)
+		"robot": _draw_robot(c)
+		"slime": _draw_slime(c)
+		"chat": _draw_cat(c)
+		"chevalier": _draw_knight(c)
+		_: _draw_orbe(c)
+
+
+## Yeux + sourire partagés par les formes rondes.
+func _face(c: Vector2) -> void:
 	var eye_col := Color(0.12, 0.10, 0.15)
 	if _blink > 0.0:
 		draw_line(c + Vector2(-11, -4), c + Vector2(-3, -4), eye_col, 2.5)
@@ -149,5 +156,100 @@ func _draw() -> void:
 	else:
 		draw_circle(c + Vector2(-7, -4), 3.5, eye_col)
 		draw_circle(c + Vector2(7, -4), 3.5, eye_col)
-	# Sourire
 	draw_arc(c + Vector2(0, 2), 9.0, 0.15 * PI, 0.85 * PI, 12, eye_col, 2.5)
+
+
+func _draw_orbe(c: Vector2) -> void:
+	draw_circle(c, RADIUS, body_color)
+	draw_arc(c, RADIUS, 0.0, TAU, 32, rim_color, 3.0)
+	draw_circle(c + Vector2(-6, -8), 5.0, body_color.lightened(0.5))
+	_face(c)
+
+
+func _draw_ghost(c: Vector2) -> void:
+	var pts := PackedVector2Array()
+	var seg := 16
+	for i in seg + 1:                       # dôme supérieur (gauche -> droite)
+		var a := PI + PI * float(i) / seg
+		pts.append(c + Vector2(cos(a), sin(a)) * RADIUS)
+	var by := RADIUS * 0.72
+	var wsteps := 18
+	for i in wsteps + 1:                     # bas ondulé (droite -> gauche)
+		var t := float(i) / wsteps
+		var x := lerpf(RADIUS, -RADIUS, t)
+		var y := by + sin(t * PI * 3.0) * (RADIUS * 0.18)
+		pts.append(c + Vector2(x, y))
+	draw_colored_polygon(pts, body_color)
+	draw_polyline(pts, rim_color, 2.0)
+	draw_circle(c + Vector2(-7, -3), 3.8, Color(0.1, 0.1, 0.14))
+	draw_circle(c + Vector2(7, -3), 3.8, Color(0.1, 0.1, 0.14))
+	draw_circle(c + Vector2(-8, -5), 1.4, Color(1, 1, 1, 0.8))
+	draw_circle(c + Vector2(6, -5), 1.4, Color(1, 1, 1, 0.8))
+
+
+func _draw_robot(c: Vector2) -> void:
+	var w := RADIUS * 1.5
+	var h := RADIUS * 1.5
+	var rect := Rect2(c + Vector2(-w * 0.5, -h * 0.5), Vector2(w, h))
+	draw_line(c + Vector2(0, -h * 0.5), c + Vector2(0, -h * 0.5 - 8.0), rim_color, 2.0)
+	draw_circle(c + Vector2(0, -h * 0.5 - 9.0), 3.0, body_color.lightened(0.4))
+	draw_rect(rect, body_color)
+	draw_rect(rect, rim_color, false, 2.5)
+	var visor := Rect2(c + Vector2(-w * 0.38, -6.0), Vector2(w * 0.76, 10.0))
+	draw_rect(visor, Color(0.08, 0.09, 0.13))
+	draw_circle(c + Vector2(-6, -1), 2.6, body_color.lightened(0.6))
+	draw_circle(c + Vector2(6, -1), 2.6, body_color.lightened(0.6))
+	draw_line(c + Vector2(-6, 9), c + Vector2(6, 9), rim_color, 2.0)
+
+
+func _draw_slime(c: Vector2) -> void:
+	var pts := PackedVector2Array()
+	var steps := 22
+	for i in steps + 1:                      # dôme supérieur écrasé
+		var t := float(i) / steps
+		var ang := PI * (1.0 - t)
+		pts.append(c + Vector2(cos(ang) * RADIUS, -absf(sin(ang)) * RADIUS * 0.95))
+	var by := RADIUS * 0.55
+	pts.append(c + Vector2(RADIUS * 0.9, by))
+	pts.append(c + Vector2(-RADIUS * 0.9, by))
+	draw_colored_polygon(pts, body_color)
+	draw_polyline(pts, rim_color, 2.0)
+	draw_circle(c + Vector2(-6, -8), 4.0, body_color.lightened(0.5))
+	_face(c)
+
+
+func _draw_cat(c: Vector2) -> void:
+	var earL := PackedVector2Array([
+		c + Vector2(-RADIUS * 0.75, -RADIUS * 0.5),
+		c + Vector2(-RADIUS * 0.2, -RADIUS * 0.98),
+		c + Vector2(-RADIUS * 0.1, -RADIUS * 0.35)])
+	var earR := PackedVector2Array([
+		c + Vector2(RADIUS * 0.75, -RADIUS * 0.5),
+		c + Vector2(RADIUS * 0.2, -RADIUS * 0.98),
+		c + Vector2(RADIUS * 0.1, -RADIUS * 0.35)])
+	draw_colored_polygon(earL, body_color)
+	draw_colored_polygon(earR, body_color)
+	draw_circle(c, RADIUS, body_color)
+	draw_arc(c, RADIUS, 0.0, TAU, 32, rim_color, 3.0)
+	draw_polyline(earL, rim_color, 2.0)
+	draw_polyline(earR, rim_color, 2.0)
+	var eye_col := Color(0.12, 0.10, 0.15)
+	draw_circle(c + Vector2(-7, -2), 3.2, eye_col)
+	draw_circle(c + Vector2(7, -2), 3.2, eye_col)
+	draw_circle(c + Vector2(0, 3), 2.0, rim_color)
+	draw_line(c + Vector2(-4, 3), c + Vector2(-14, 1), rim_color, 1.2)
+	draw_line(c + Vector2(-4, 5), c + Vector2(-14, 6), rim_color, 1.2)
+	draw_line(c + Vector2(4, 3), c + Vector2(14, 1), rim_color, 1.2)
+	draw_line(c + Vector2(4, 5), c + Vector2(14, 6), rim_color, 1.2)
+
+
+func _draw_knight(c: Vector2) -> void:
+	draw_line(c + Vector2(0, -RADIUS), c + Vector2(0, -RADIUS - 9.0), rim_color, 3.0)
+	draw_circle(c + Vector2(0, -RADIUS - 10.0), 3.0, body_color.lightened(0.3))
+	draw_circle(c, RADIUS, body_color)
+	draw_arc(c, RADIUS, 0.0, TAU, 32, rim_color, 3.0)
+	var band := Rect2(c + Vector2(-RADIUS * 0.85, -4.0), Vector2(RADIUS * 1.7, 11.0))
+	draw_rect(band, Color(0.09, 0.09, 0.13))
+	draw_line(c + Vector2(-6, -3), c + Vector2(-6, 4), body_color.lightened(0.6), 2.5)
+	draw_line(c + Vector2(6, -3), c + Vector2(6, 4), body_color.lightened(0.6), 2.5)
+	draw_line(c + Vector2(0, -RADIUS), c + Vector2(0, -5), rim_color, 2.0)

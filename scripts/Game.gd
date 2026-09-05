@@ -159,18 +159,18 @@ var _combo_timer := 0.0              ## Temps avant expiration du combo
 
 # Skins (apparence de la lueur, achetés avec l'or)
 const SKINS: Array = [
-	{"id": "or", "name": "Lueur dorée", "price": 0,
+	{"id": "or", "name": "Lueur dorée", "shape": "orbe", "price": 0,
 	 "body": Color(0.95, 0.85, 0.30), "rim": Color(0.35, 0.30, 0.10), "trail": Color(1.0, 0.8, 0.35)},
-	{"id": "cyan", "name": "Lueur cyan", "price": 120,
+	{"id": "cyan", "name": "Robot", "shape": "robot", "price": 120,
 	 "body": Color(0.55, 0.9, 1.0), "rim": Color(0.12, 0.32, 0.42), "trail": Color(0.4, 0.85, 1.0)},
-	{"id": "violet", "name": "Lueur violette", "price": 180,
+	{"id": "violet", "name": "Fantôme", "shape": "fantome", "price": 180,
 	 "body": Color(0.74, 0.56, 1.0), "rim": Color(0.26, 0.16, 0.42), "trail": Color(0.66, 0.46, 1.0)},
-	{"id": "emeraude", "name": "Lueur émeraude", "price": 240,
+	{"id": "emeraude", "name": "Slime", "shape": "slime", "price": 240,
 	 "body": Color(0.46, 0.95, 0.62), "rim": Color(0.12, 0.36, 0.22), "trail": Color(0.42, 0.95, 0.62)},
-	{"id": "rose", "name": "Lueur rose", "price": 320,
+	{"id": "rose", "name": "Chaton", "shape": "chat", "price": 320,
 	 "body": Color(1.0, 0.56, 0.82), "rim": Color(0.4, 0.16, 0.3), "trail": Color(1.0, 0.5, 0.8)},
-	{"id": "spectre", "name": "Spectre", "price": 500,
-	 "body": Color(0.95, 0.97, 1.0), "rim": Color(0.42, 0.47, 0.57), "trail": Color(0.9, 0.95, 1.0)},
+	{"id": "spectre", "name": "Chevalier", "shape": "chevalier", "price": 500,
+	 "body": Color(0.9, 0.93, 1.0), "rim": Color(0.42, 0.47, 0.57), "trail": Color(0.9, 0.95, 1.0)},
 ]
 var owned_skins: Dictionary = {"or": true}   ## Skins débloqués
 var current_skin := "or"                      ## Skin sélectionné
@@ -1670,6 +1670,7 @@ func _apply_skin() -> void:
 		player.body_color = s["body"]
 		player.rim_color = s["rim"]
 		player.trail_color = s["trail"]
+		player.shape = s.get("shape", "orbe")
 		player.queue_redraw()
 	if _player_trail != null:
 		var t: Color = s["trail"]
