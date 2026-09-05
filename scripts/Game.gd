@@ -10,6 +10,10 @@ const COLS := 21
 const ROWS := 31
 const MAP_W := COLS * TILE
 const MAP_H := ROWS * TILE
+# Marges laissées à la caméra pour que les bords de l'arène passent sous le HUD
+# (barre du haut, joystick / bouton objet en bas) au lieu d'être cachés.
+const HUD_TOP_INSET := 136
+const HUD_BOTTOM_INSET := 84
 const SPAWN_CELL := Vector2i(COLS / 2, ROWS / 2)
 const SAVE_PATH := "user://dungeon.cfg"
 
@@ -181,6 +185,7 @@ var level_label: Label
 var coins_label: Label
 var score_label: Label
 var hearts: HeartsBar
+var minimap: Minimap
 var flash_label: Label
 var title_root: Control
 var title_best: Label
@@ -932,9 +937,9 @@ func _create_player() -> void:
 
 	camera = Camera2D.new()
 	camera.limit_left = 0
-	camera.limit_top = 0
+	camera.limit_top = -HUD_TOP_INSET
 	camera.limit_right = MAP_W
-	camera.limit_bottom = MAP_H
+	camera.limit_bottom = MAP_H + HUD_BOTTOM_INSET
 	camera.position_smoothing_enabled = true
 	camera.position_smoothing_speed = 8.0
 	player.add_child(camera)
@@ -1036,6 +1041,9 @@ func _camera_punch() -> void:
 func _draw() -> void:
 	if walls.is_empty():
 		return
+	# Fond sombre débordant : couvre les marges hors-carte dégagées pour le HUD
+	# afin qu'elles restent noires (et non de la couleur d'effacement par défaut).
+	draw_rect(Rect2(-220, -220, MAP_W + 440, MAP_H + 440), Color(0.02, 0.02, 0.045))
 	for y in ROWS:
 		for x in COLS:
 			if walls[y][x]:
@@ -1132,10 +1140,21 @@ func _build_ui() -> void:
 	hearts.position = Vector2(34, 84)
 	hud_root.add_child(hearts)
 
-	var mm := Minimap.new()
-	mm.game = self
-	mm.position = Vector2(720 - Minimap.MM_W - 16, 138)
-	hud_root.add_child(mm)
+	minimap = Minimap.new()
+	minimap.game = self
+	minimap.position = Vector2(720 - Minimap.MM_W - 14, 128)
+	hud_root.add_child(minimap)
+
+	# Bouton pour masquer/afficher la mini-carte (elle peut cacher des pièces)
+	var map_toggle := Button.new()
+	map_toggle.text = "Carte"
+	map_toggle.add_theme_font_size_override("font_size", 18)
+	map_toggle.size = Vector2(84, 34)
+	map_toggle.position = Vector2(720 - 98, 72)
+	map_toggle.focus_mode = Control.FOCUS_NONE
+	map_toggle.modulate = Color(1, 1, 1, 0.8)
+	map_toggle.pressed.connect(func() -> void: minimap.visible = not minimap.visible)
+	hud_root.add_child(map_toggle)
 
 	flash_label = Label.new()
 	flash_label.add_theme_font_size_override("font_size", 54)

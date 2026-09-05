@@ -5,7 +5,7 @@ extends Node2D
 
 var game            ## Référence au nœud Game (accès dynamique)
 
-const MM_W := 156.0   ## Largeur de la mini-carte (px écran)
+const MM_W := 130.0   ## Largeur de la mini-carte (px écran)
 
 
 func _process(_delta: float) -> void:
@@ -24,15 +24,15 @@ func _draw() -> void:
 	var mm_h: float = cw * rows
 	var tile: float = game.TILE
 
-	# Fond
-	draw_rect(Rect2(-5, -5, MM_W + 10, mm_h + 10), Color(0.03, 0.03, 0.06, 0.62))
+	# Fond (translucide pour ne pas masquer complètement le terrain dessous)
+	draw_rect(Rect2(-5, -5, MM_W + 10, mm_h + 10), Color(0.03, 0.03, 0.06, 0.40))
 	draw_rect(Rect2(-5, -5, MM_W + 10, mm_h + 10), Color(1, 1, 1, 0.12), false, 1.0)
 
 	# Murs
 	for y in rows:
 		for x in cols:
 			if walls[y][x]:
-				draw_rect(Rect2(x * cw, y * cw, cw + 0.6, cw + 0.6), Color(0.55, 0.56, 0.66, 0.9))
+				draw_rect(Rect2(x * cw, y * cw, cw + 0.6, cw + 0.6), Color(0.55, 0.56, 0.66, 0.75))
 
 	# Pièces
 	for c in game.coins:
