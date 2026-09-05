@@ -191,8 +191,6 @@ var _trail_rainbow := false                    ## Traînée arc-en-ciel (couleur
 var login_streak := 0                ## Jours de connexion consécutifs
 var last_login_day := 0              ## Numéro de jour de la dernière connexion
 var seen_tuto := false               ## Tutoriel du premier lancement déjà vu ?
-var welcome_gift := false            ## Cadeau d'or de bienvenue déjà reçu ?
-const WELCOME_GOLD := 1500           ## Montant du cadeau de bienvenue
 
 # Éclairage / ambiance
 var _light_tex: GradientTexture2D
@@ -280,11 +278,6 @@ func _ready() -> void:
 	hud_root.visible = false
 
 	_check_login_streak()
-	if not welcome_gift:
-		welcome_gift = true
-		gold += WELCOME_GOLD
-		_save_prefs()
-		_queue_toast("Cadeau de bienvenue : +%d or !" % WELCOME_GOLD)
 	if not seen_tuto:
 		tutorial_root.visible = true
 
@@ -2214,7 +2207,6 @@ func _load_prefs() -> void:
 		login_streak = int(cfg.get_value("daily", "streak", 0))
 		last_login_day = int(cfg.get_value("daily", "last_day", 0))
 		seen_tuto = bool(cfg.get_value("options", "seen_tuto", false))
-		welcome_gift = bool(cfg.get_value("shop", "welcome_gift", false))
 
 
 func _save_prefs() -> void:
@@ -2234,7 +2226,6 @@ func _save_prefs() -> void:
 	cfg.set_value("daily", "streak", login_streak)
 	cfg.set_value("daily", "last_day", last_login_day)
 	cfg.set_value("options", "seen_tuto", seen_tuto)
-	cfg.set_value("shop", "welcome_gift", welcome_gift)
 	cfg.save(SAVE_PATH)
 	_refresh_best_labels()
 
