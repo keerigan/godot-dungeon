@@ -53,6 +53,8 @@ esquivant des monstres qui te traquent — sans jamais attaquer.
   Achetables avec l'or, au choix sur l'écran-titre.
 - **Bilan de fin de partie** : score, pièces, frôlements, ennemis, coffres et
   record battu.
+- **Cadeau de bienvenue** : 1500 or offerts au premier lancement pour débloquer
+  des apparences tout de suite.
 - **Tutoriel** au premier lancement + **récompense de connexion quotidienne**
   (streak) qui augmente jour après jour.
 - **Défi du jour** : un objectif quotidien (même pour tous) qui rapporte de l'or.
