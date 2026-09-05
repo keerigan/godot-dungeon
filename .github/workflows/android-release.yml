@@ -1,0 +1,157 @@
+name: Build Android release (signé)
+
+# Génère les binaires SIGNÉS pour le Play Store :
+#   - gloomrunner.aab  (App Bundle, requis par le Play Store)
+#   - gloomrunner.apk  (APK signé, pratique pour tester / distribuer soi-même)
+#
+# Déclenchement MANUEL uniquement (onglet Actions -> Run workflow).
+# Nécessite d'avoir créé un keystore de release et ajouté ces GitHub Secrets
+# (Settings -> Secrets and variables -> Actions) :
+#   ANDROID_KEYSTORE_BASE64    : le fichier keystore encodé en base64
+#   ANDROID_KEYSTORE_PASSWORD  : le mot de passe du keystore (= mot de passe de la clé)
+#   ANDROID_KEY_ALIAS          : l'alias de la clé
+#
+# Les binaires sont publiés en ARTEFACTS du run (pas en release publique),
+# à télécharger puis à envoyer sur la Google Play Console.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "Nom de version (ex. 1.0)"
+        required: false
+        default: "1.0"
+      version_code:
+        description: "Code de version entier (à incrémenter à chaque envoi Play)"
+        required: false
+        default: "1"
+
+permissions:
+  contents: read
+
+env:
+  GODOT_VERSION: "4.3"
+  EXPORT_PRESET: "Android"
+
+jobs:
+  release:
+    name: Export Android release (AAB + APK signés)
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Vérifier la présence des secrets de signature
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KP: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KA: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -eu
+          missing=""
+          [ -z "$KS" ] && missing="$missing ANDROID_KEYSTORE_BASE64"
+          [ -z "$KP" ] && missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -z "$KA" ] && missing="$missing ANDROID_KEY_ALIAS"
+          if [ -n "$missing" ]; then
+            echo "::error::Secrets manquants :$missing"
+            echo "Ajoute-les dans Settings > Secrets and variables > Actions, puis relance."
+            exit 1
+          fi
+          echo "Secrets présents."
+
+      - name: Préparer les templates d'export
+        run: |
+          set -eux
+          mkdir -p ~/.local/share/godot/export_templates/
+          if [ -d /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ] \
+             && [ ! -d ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable ]; then
+            cp -r /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable \
+                  ~/.local/share/godot/export_templates/
+          fi
+          ls -la ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/ || true
+
+      - name: Décoder le keystore de release
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -eu
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$PWD/release.keystore"
+          echo "keystore: $(wc -c < "$PWD/release.keystore") octets"
+
+      - name: Appliquer version_name / version_code
+        run: |
+          set -eux
+          sed -i "s#^version/code=.*#version/code=${{ github.event.inputs.version_code }}#" export_presets.cfg
+          sed -i "s#^version/name=.*#version/name=\"${{ github.event.inputs.version_name }}\"#" export_presets.cfg
+          grep -n '^version/' export_presets.cfg
+
+      - name: Importer le projet (ressources + EditorSettings)
+        run: |
+          set -eux
+          godot --headless --path . --editor --quit-after 400 2>&1 | tail -n 20 || true
+
+      - name: Renseigner les chemins JDK / SDK Android
+        run: |
+          set -eux
+          SETTINGS="$HOME/.config/godot/editor_settings-${GODOT_VERSION}.tres"
+          if [ ! -f "$SETTINGS" ]; then
+            SETTINGS=$(find / -name "editor_settings-${GODOT_VERSION}.tres" 2>/dev/null | head -n1)
+          fi
+          test -n "$SETTINGS"
+          JAVA_DIR="${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(command -v keytool)")")")}"
+          SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          set_key() {
+            if grep -q "^$1 = " "$SETTINGS"; then
+              sed -i "s#^$1 = .*#$1 = \"$2\"#" "$SETTINGS"
+            else
+              sed -i "/^\[resource\]/a $1 = \"$2\"" "$SETTINGS"
+            fi
+          }
+          set_key "export/android/java_sdk_path" "$JAVA_DIR"
+          [ -n "$SDK_DIR" ] && set_key "export/android/android_sdk_path" "$SDK_DIR"
+          grep -n 'export/android/\(java_sdk_path\|android_sdk_path\)' "$SETTINGS"
+
+      - name: Exporter l'APK release (signé)
+        env:
+          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/release.keystore
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: ${{ secrets.ANDROID_KEY_ALIAS }}
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -eux
+          mkdir -p build
+          godot --headless --path . --export-release "$EXPORT_PRESET" "build/gloomrunner.apk"
+          test -f "build/gloomrunner.apk"
+
+      - name: Activer le build Gradle pour l'AAB + installer le template
+        run: |
+          set -eux
+          sed -i 's#^gradle_build/use_gradle_build=.*#gradle_build/use_gradle_build=true#' export_presets.cfg
+          SRC=$(find ~/.local/share/godot/export_templates -name "android_source.zip" | head -n1)
+          test -n "$SRC"
+          mkdir -p android/build
+          unzip -o "$SRC" -d android/build >/dev/null
+          echo "${GODOT_VERSION}.stable" > android/build/.build_version
+          mkdir -p android/plugins
+          : > android/.gdignore
+
+      - name: Exporter l'AAB release (signé)
+        env:
+          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/release.keystore
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: ${{ secrets.ANDROID_KEY_ALIAS }}
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -eux
+          godot --headless --path . --export-release "$EXPORT_PRESET" "build/gloomrunner.aab"
+          ls -la build/
+          test -f "build/gloomrunner.aab"
+
+      - name: Publier les binaires signés (artefacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: gloomrunner-release
+          path: |
+            build/gloomrunner.aab
+            build/gloomrunner.apk
+          if-no-files-found: error

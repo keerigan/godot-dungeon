@@ -75,6 +75,36 @@ automatiquement à chaque push sur `main`. Pour l'installer sur ton téléphone 
 
 ---
 
+## 🏪 Publier sur le Google Play Store (binaire signé)
+
+Le workflow **« Build Android release (signé) »** génère un **AAB** (requis par
+le Play Store) et un **APK** signés. Il se lance **à la main** et lit un keystore
+de release depuis les *GitHub Secrets* (jamais commité).
+
+1. **Créer un keystore de release** (une seule fois, garde-le précieusement — le
+   perdre = ne plus pouvoir mettre à jour l'appli) :
+   ```
+   keytool -genkeypair -v -keystore gloomrunner.keystore \
+     -alias gloomrunner -keyalg RSA -keysize 2048 -validity 10000 \
+     -storepass MOT_DE_PASSE -keypass MOT_DE_PASSE
+   ```
+2. **Encoder** le keystore en base64 : `base64 -w0 gloomrunner.keystore` (macOS :
+   `base64 gloomrunner.keystore`).
+3. **Ajouter les secrets** dans *Settings → Secrets and variables → Actions* :
+   - `ANDROID_KEYSTORE_BASE64` : le résultat du base64
+   - `ANDROID_KEYSTORE_PASSWORD` : `MOT_DE_PASSE` (même pour le store et la clé)
+   - `ANDROID_KEY_ALIAS` : `gloomrunner`
+4. **Lancer** : onglet *Actions* → *Build Android release (signé)* → *Run
+   workflow* (renseigne `version_code`, à **incrémenter** à chaque envoi).
+5. **Récupérer** l'`.aab` dans les artefacts du run et l'envoyer sur la **Google
+   Play Console** (compte développeur ~25 $ requis).
+
+> Il reste à fournir côté Play Console : icône 512×512, image 1024×500,
+> captures d'écran, description, **politique de confidentialité** (URL) et le
+> questionnaire de classification de contenu.
+
+---
+
 ## 🚀 Ouvrir le projet
 
 1. Installe **Godot 4.3+** (version standard, pas la version .NET) :
