@@ -149,6 +149,37 @@ var _daily_done := false             ## Défi du jour déjà réussi aujourd'hui
 var daily_done_key := ""             ## Clé du jour où le défi a été réussi
 var _run_kills := 0                  ## Ennemis éliminés dans la partie en cours
 var _run_chests := 0                 ## Coffres ouverts dans la partie en cours
+var _run_grazes := 0                 ## Frôlements réussis dans la partie en cours
+var _run_coins_collected := 0        ## Pièces ramassées dans la partie en cours
+
+# Combo / frôlements
+var _combo := 0                      ## Nombre de frôlements enchaînés
+var _combo_tier := 1                 ## Palier de multiplicateur atteint
+var _combo_timer := 0.0              ## Temps avant expiration du combo
+
+# Skins (apparence de la lueur, achetés avec l'or)
+const SKINS: Array = [
+	{"id": "or", "name": "Lueur dorée", "price": 0,
+	 "body": Color(0.95, 0.85, 0.30), "rim": Color(0.35, 0.30, 0.10), "trail": Color(1.0, 0.8, 0.35)},
+	{"id": "cyan", "name": "Lueur cyan", "price": 120,
+	 "body": Color(0.55, 0.9, 1.0), "rim": Color(0.12, 0.32, 0.42), "trail": Color(0.4, 0.85, 1.0)},
+	{"id": "violet", "name": "Lueur violette", "price": 180,
+	 "body": Color(0.74, 0.56, 1.0), "rim": Color(0.26, 0.16, 0.42), "trail": Color(0.66, 0.46, 1.0)},
+	{"id": "emeraude", "name": "Lueur émeraude", "price": 240,
+	 "body": Color(0.46, 0.95, 0.62), "rim": Color(0.12, 0.36, 0.22), "trail": Color(0.42, 0.95, 0.62)},
+	{"id": "rose", "name": "Lueur rose", "price": 320,
+	 "body": Color(1.0, 0.56, 0.82), "rim": Color(0.4, 0.16, 0.3), "trail": Color(1.0, 0.5, 0.8)},
+	{"id": "spectre", "name": "Spectre", "price": 500,
+	 "body": Color(0.95, 0.97, 1.0), "rim": Color(0.42, 0.47, 0.57), "trail": Color(0.9, 0.95, 1.0)},
+]
+var owned_skins: Dictionary = {"or": true}   ## Skins débloqués
+var current_skin := "or"                      ## Skin sélectionné
+var _player_trail: CPUParticles2D             ## Traînée du héros (couleur du skin)
+
+# Connexion quotidienne
+var login_streak := 0                ## Jours de connexion consécutifs
+var last_login_day := 0              ## Numéro de jour de la dernière connexion
+var seen_tuto := false               ## Tutoriel du premier lancement déjà vu ?
 
 # Éclairage / ambiance
 var _light_tex: GradientTexture2D
@@ -186,6 +217,7 @@ var coins_label: Label
 var score_label: Label
 var hearts: HeartsBar
 var minimap: Minimap
+var combo_label: Label
 var flash_label: Label
 var title_root: Control
 var title_best: Label
@@ -199,6 +231,10 @@ var pause_root: Control
 var shop_root: Control
 var _shop_list: VBoxContainer
 var _shop_gold_label: Label
+var skins_root: Control
+var _skins_list: VBoxContainer
+var _skins_gold_label: Label
+var tutorial_root: Control
 var title_gold: Label
 var _ach_list: VBoxContainer
 var _toast_label: Label
@@ -220,6 +256,7 @@ func _ready() -> void:
 
 	_build_ui()
 	_create_player()
+	_apply_skin()
 	Sfx.play_music()
 
 	state = State.TITLE
@@ -228,6 +265,10 @@ func _ready() -> void:
 	build_level()
 	title_root.visible = true
 	hud_root.visible = false
+
+	_check_login_streak()
+	if not seen_tuto:
+		tutorial_root.visible = true
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -277,7 +318,29 @@ func _process(delta: float) -> void:
 					add_shake(7.0)
 					_vibrate(120)
 					_damage_free_level = false
+					_reset_combo()
 				break
+
+	# Frôlements (combo) : un ennemi qui entre puis ressort de la zone proche
+	# sans toucher le joueur rapporte un combo (multiplicateur de score).
+	if player.invuln <= 0.0:
+		for e in enemies:
+			if not is_instance_valid(e) or e.frozen:
+				continue
+			var d := player.global_position.distance_to(e.global_position)
+			var graze_r := Player.RADIUS + e.radius + 18.0
+			var hit_r := Player.RADIUS + e.radius - 4.0
+			var was_near: bool = e.get_meta("grz", false)
+			if d <= graze_r and d > hit_r:
+				e.set_meta("grz", true)
+			elif was_near and d > graze_r:
+				e.set_meta("grz", false)
+				_register_graze((player.global_position + e.global_position) * 0.5)
+	# Expiration du combo si plus de frôlement depuis un moment
+	if _combo > 0:
+		_combo_timer -= delta
+		if _combo_timer <= 0.0:
+			_reset_combo()
 
 	# Pièges dangereux -> blessent le joueur ET les ennemis
 	for t in traps:
@@ -291,6 +354,7 @@ func _process(delta: float) -> void:
 				add_shake(6.0)
 				_vibrate(120)
 				_damage_free_level = false
+				_reset_combo()
 		var survivors: Array[Enemy] = []
 		for e in enemies:
 			if not is_instance_valid(e):
@@ -330,6 +394,10 @@ func start_game() -> void:
 	_refresh_item_button()
 	_run_kills = 0
 	_run_chests = 0
+	_run_grazes = 0
+	_run_coins_collected = 0
+	_reset_combo()
+	_apply_skin()
 	player.visible = true
 	build_level()
 
@@ -493,10 +561,14 @@ func _on_player_died() -> void:
 		if is_instance_valid(e):
 			e.target = null
 	_vibrate(300)
-	if player.coins > best_score:
-		best_score = player.coins
+	_reset_combo()
 	var run := player.coins
-	gameover_score.text = "Score : %d   ·   Niveau %d\nMeilleur : %d\n+%d or en banque" % [run, level, best_score, run]
+	var new_best := run > best_score
+	if new_best:
+		best_score = run
+	var best_line := "Nouveau record !  %d" % best_score if new_best else "Meilleur : %d" % best_score
+	gameover_score.text = "Score : %d   ·   Niveau %d\n%s\nPièces ramassées : %d   ·   Frôlements : %d\nEnnemis éliminés : %d   ·   Coffres : %d\n+%d or en banque" % [
+		run, level, best_line, _run_coins_collected, _run_grazes, _run_kills, _run_chests, run]
 	_bank_run()
 	gameover_root.visible = true
 
@@ -504,6 +576,11 @@ func _on_player_died() -> void:
 func _on_coin_collected(pos: Vector2) -> void:
 	Sfx.play(Sfx.coin)
 	player.add_coin()
+	# Bonus de combo : le multiplicateur augmente la valeur des pièces
+	var mult := _combo_mult()
+	if mult > 1:
+		player.coins += mult - 1
+	_run_coins_collected += 1
 	_stat_add("coins", 1)
 	coins_left -= 1
 	_burst(pos, Color(1.0, 0.85, 0.3), 8, 150.0, 0.4)
@@ -512,6 +589,46 @@ func _on_coin_collected(pos: Vector2) -> void:
 	_check_daily()
 	if coins_left <= 0:
 		_open_exit()
+
+
+# ---------------------------------------------------------------------------
+# Combo / frôlements
+# ---------------------------------------------------------------------------
+
+func _combo_mult() -> int:
+	return clampi(1 + _combo / 4, 1, 5)
+
+
+func _register_graze(pos: Vector2) -> void:
+	_combo += 1
+	_run_grazes += 1
+	_combo_timer = 6.0
+	_stat_add("grazes", 1)
+	_burst(pos, player.trail_color, 5, 90.0, 0.28)
+	var tier := _combo_mult()
+	if tier > _combo_tier:
+		_combo_tier = tier
+		_flash("Combo  x%d" % tier)
+		Sfx.play(Sfx.powerup)
+		_vibrate(25)
+	_update_combo_label()
+
+
+func _reset_combo() -> void:
+	_combo = 0
+	_combo_tier = 1
+	_combo_timer = 0.0
+	_update_combo_label()
+
+
+func _update_combo_label() -> void:
+	if combo_label == null:
+		return
+	if _combo <= 0:
+		combo_label.visible = false
+	else:
+		combo_label.visible = true
+		combo_label.text = "Combo %d   ·   score x%d" % [_combo, _combo_mult()]
 
 
 func _on_powerup(kind: int) -> void:
@@ -925,6 +1042,21 @@ func _create_player() -> void:
 	player.coins_changed.connect(func(_c): _update_hud())
 	add_child(player)
 
+	# Traînée du héros (couleur selon le skin)
+	_player_trail = CPUParticles2D.new()
+	_player_trail.amount = 20
+	_player_trail.lifetime = 0.5
+	_player_trail.local_coords = false   # les particules restent dans le monde -> traînée
+	_player_trail.emitting = true
+	_player_trail.spread = 6.0
+	_player_trail.gravity = Vector2.ZERO
+	_player_trail.initial_velocity_min = 0.0
+	_player_trail.initial_velocity_max = 0.0
+	_player_trail.scale_amount_min = 2.5
+	_player_trail.scale_amount_max = 4.5
+	_player_trail.z_index = 2
+	player.add_child(_player_trail)
+
 	_player_light = PointLight2D.new()
 	_player_light.texture = _light_tex
 	_player_light.texture_scale = 3.3
@@ -1156,6 +1288,17 @@ func _build_ui() -> void:
 	map_toggle.pressed.connect(func() -> void: minimap.visible = not minimap.visible)
 	hud_root.add_child(map_toggle)
 
+	# Indicateur de combo (frôlements) : visible seulement pendant un combo
+	combo_label = Label.new()
+	combo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	combo_label.add_theme_font_size_override("font_size", 24)
+	combo_label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.3))
+	combo_label.size = Vector2(720, 34)
+	combo_label.position = Vector2(0, 122)
+	combo_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	combo_label.visible = false
+	hud_root.add_child(combo_label)
+
 	flash_label = Label.new()
 	flash_label.add_theme_font_size_override("font_size", 54)
 	flash_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1193,6 +1336,8 @@ func _build_ui() -> void:
 	_build_achievements_ui()
 	_build_pause_ui()
 	_build_shop_ui()
+	_build_skins_ui()
+	_build_tutorial_ui()
 
 
 func _build_vignette() -> void:
@@ -1346,6 +1491,14 @@ func _build_title_ui() -> void:
 	shop_btn.pressed.connect(_open_shop)
 	box.add_child(shop_btn)
 
+	var skins_btn := Button.new()
+	skins_btn.text = "Apparence"
+	skins_btn.add_theme_font_size_override("font_size", 24)
+	skins_btn.custom_minimum_size = Vector2(300, 58)
+	skins_btn.focus_mode = Control.FOCUS_NONE
+	skins_btn.pressed.connect(_open_skins)
+	box.add_child(skins_btn)
+
 	_refresh_best_labels()
 
 
@@ -1498,6 +1651,203 @@ func _open_shop() -> void:
 		b.pressed.connect(_buy.bind(id))
 		_shop_list.add_child(b)
 	shop_root.visible = true
+
+
+# ---------------------------------------------------------------------------
+# Apparence (skins de la lueur)
+# ---------------------------------------------------------------------------
+
+func _skin_by_id(id: String) -> Dictionary:
+	for s in SKINS:
+		if s["id"] == id:
+			return s
+	return SKINS[0]
+
+
+func _apply_skin() -> void:
+	var s := _skin_by_id(current_skin)
+	if player != null:
+		player.body_color = s["body"]
+		player.rim_color = s["rim"]
+		player.trail_color = s["trail"]
+		player.queue_redraw()
+	if _player_trail != null:
+		var t: Color = s["trail"]
+		_player_trail.color = Color(t.r, t.g, t.b, 0.45)
+
+
+func _build_skins_ui() -> void:
+	skins_root = Control.new()
+	skins_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	skins_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	skins_root.visible = false
+	ui_layer.add_child(skins_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.03, 0.07, 0.92)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	skins_root.add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	skins_root.add_child(center)
+
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 16)
+	center.add_child(box)
+
+	var title := Label.new()
+	title.text = "APPARENCE"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 48)
+	title.add_theme_color_override("font_color", Color(0.98, 0.82, 0.35))
+	box.add_child(title)
+
+	_skins_gold_label = Label.new()
+	_skins_gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_skins_gold_label.add_theme_font_size_override("font_size", 26)
+	_skins_gold_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
+	box.add_child(_skins_gold_label)
+
+	_skins_list = VBoxContainer.new()
+	_skins_list.add_theme_constant_override("separation", 10)
+	box.add_child(_skins_list)
+
+	var close := Button.new()
+	close.text = "  Fermer  "
+	close.add_theme_font_size_override("font_size", 28)
+	close.custom_minimum_size = Vector2(220, 64)
+	close.focus_mode = Control.FOCUS_NONE
+	close.pressed.connect(func(): skins_root.visible = false)
+	box.add_child(close)
+
+
+func _open_skins() -> void:
+	_skins_gold_label.text = "Or : %d" % gold
+	for c in _skins_list.get_children():
+		c.queue_free()
+	for s in SKINS:
+		var id: String = s["id"]
+		var owned: bool = owned_skins.has(id)
+		var selected: bool = current_skin == id
+		var price: int = int(s["price"])
+		var b := Button.new()
+		var suffix := ""
+		if selected:
+			suffix = "   —   SÉLECTIONNÉ"
+		elif owned:
+			suffix = "   —   Choisir"
+		else:
+			suffix = "   —   %d or" % price
+		b.text = s["name"] + suffix
+		b.add_theme_font_size_override("font_size", 22)
+		b.custom_minimum_size = Vector2(460, 62)
+		b.focus_mode = Control.FOCUS_NONE
+		b.add_theme_color_override("font_color", s["body"])
+		b.disabled = selected or (not owned and gold < price)
+		b.pressed.connect(_skin_action.bind(id))
+		_skins_list.add_child(b)
+	skins_root.visible = true
+
+
+func _skin_action(id: String) -> void:
+	var s := _skin_by_id(id)
+	if owned_skins.has(id):
+		current_skin = id
+	else:
+		if gold < int(s["price"]):
+			return
+		gold -= int(s["price"])
+		owned_skins[id] = true
+		current_skin = id
+		Sfx.play(Sfx.powerup)
+	_vibrate(30)
+	_apply_skin()
+	_save_prefs()
+	_open_skins()
+
+
+# ---------------------------------------------------------------------------
+# Tutoriel (premier lancement) & connexion quotidienne
+# ---------------------------------------------------------------------------
+
+func _build_tutorial_ui() -> void:
+	tutorial_root = Control.new()
+	tutorial_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tutorial_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	tutorial_root.visible = false
+	ui_layer.add_child(tutorial_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.03, 0.07, 0.95)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tutorial_root.add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tutorial_root.add_child(center)
+
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 22)
+	center.add_child(box)
+
+	var title := Label.new()
+	title.text = "BIENVENUE"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 46)
+	title.add_theme_color_override("font_color", Color(0.98, 0.82, 0.35))
+	box.add_child(title)
+
+	var body := Label.new()
+	body.text = "• Déplace-toi : pose le doigt n'importe où et glisse.\n" \
+		+ "• Ramasse tout l'or pour ouvrir la sortie.\n" \
+		+ "• Rejoins le portail pour passer au niveau suivant.\n" \
+		+ "• Esquive les ennemis — frôle-les de près pour\n" \
+		+ "   enchaîner un COMBO et gagner plus de score.\n" \
+		+ "• Dépense ton or en boutique et en apparences."
+	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	body.add_theme_font_size_override("font_size", 24)
+	body.add_theme_color_override("font_color", Color(0.88, 0.88, 0.92))
+	box.add_child(body)
+
+	var ok := Button.new()
+	ok.text = "  Compris !  "
+	ok.add_theme_font_size_override("font_size", 30)
+	ok.custom_minimum_size = Vector2(280, 76)
+	ok.focus_mode = Control.FOCUS_NONE
+	ok.pressed.connect(_close_tutorial)
+	box.add_child(ok)
+
+
+func _close_tutorial() -> void:
+	tutorial_root.visible = false
+	seen_tuto = true
+	_save_prefs()
+
+
+func _day_number() -> int:
+	var d := Time.get_date_dict_from_system()
+	var unix := Time.get_unix_time_from_datetime_dict({
+		"year": d.year, "month": d.month, "day": d.day,
+		"hour": 0, "minute": 0, "second": 0})
+	return int(unix / 86400)
+
+
+func _check_login_streak() -> void:
+	var today := _day_number()
+	if last_login_day == today:
+		return   # déjà connecté aujourd'hui
+	if last_login_day == today - 1:
+		login_streak += 1
+	else:
+		login_streak = 1
+	last_login_day = today
+	var reward := 15 + 5 * mini(login_streak, 7)   # 20..50 or
+	gold += reward
+	_save_prefs()
+	_queue_toast("Jour %d de connexion !  +%d or" % [login_streak, reward])
 
 
 func _build_pause_ui() -> void:
@@ -1750,6 +2100,15 @@ func _load_prefs() -> void:
 		up_shield = bool(cfg.get_value("shop", "shield", false))
 		up_lucky = bool(cfg.get_value("shop", "lucky", false))
 		daily_done_key = str(cfg.get_value("daily", "done_key", ""))
+		owned_skins = {"or": true}
+		for id in cfg.get_value("skins", "owned", ["or"]):
+			owned_skins[id] = true
+		current_skin = str(cfg.get_value("skins", "current", "or"))
+		if not owned_skins.has(current_skin):
+			current_skin = "or"
+		login_streak = int(cfg.get_value("daily", "streak", 0))
+		last_login_day = int(cfg.get_value("daily", "last_day", 0))
+		seen_tuto = bool(cfg.get_value("options", "seen_tuto", false))
 
 
 func _save_prefs() -> void:
@@ -1764,6 +2123,11 @@ func _save_prefs() -> void:
 	cfg.set_value("shop", "shield", up_shield)
 	cfg.set_value("shop", "lucky", up_lucky)
 	cfg.set_value("daily", "done_key", daily_done_key)
+	cfg.set_value("skins", "owned", owned_skins.keys())
+	cfg.set_value("skins", "current", current_skin)
+	cfg.set_value("daily", "streak", login_streak)
+	cfg.set_value("daily", "last_day", last_login_day)
+	cfg.set_value("options", "seen_tuto", seen_tuto)
 	cfg.save(SAVE_PATH)
 	_refresh_best_labels()
 

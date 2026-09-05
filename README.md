@@ -41,6 +41,14 @@ esquivant des monstres qui te traquent — sans jamais attaquer.
 - **Bouton pause** (menu Reprendre / Recommencer / Quitter).
 - **Succès** à débloquer (panneau sur l'écran-titre) avec progression et
   notifications.
+- **Combo / frôlements** : esquiver un ennemi de justesse enchaîne un combo qui
+  **multiplie le score** (jusqu'à x5) — récompense la prise de risque.
+- **Apparences à débloquer** : plusieurs couleurs de la lueur (avec traînée
+  assortie) achetables avec l'or, au choix sur l'écran-titre.
+- **Bilan de fin de partie** : score, pièces, frôlements, ennemis, coffres et
+  record battu.
+- **Tutoriel** au premier lancement + **récompense de connexion quotidienne**
+  (streak) qui augmente jour après jour.
 - **Défi du jour** : un objectif quotidien (même pour tous) qui rapporte de l'or.
 - **8 thèmes / biomes** au choix sur l'écran-titre — ou mode **Auto (biomes)**
   qui fait évoluer l'ambiance au fil des niveaux. Choix sauvegardé.

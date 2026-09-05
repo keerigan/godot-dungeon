@@ -23,6 +23,9 @@ var shield := 0.0                         ## Temps restant du bouclier (invincib
 var _bob := 0.0                           ## Animation de balancement
 var _blink := 0.0                         ## Temps restant d'un clignement
 var _blink_cd := 3.0                      ## Délai avant le prochain clignement
+var body_color := Color(0.95, 0.85, 0.30) ## Couleur du héros (skin)
+var rim_color := Color(0.35, 0.30, 0.10)  ## Contour du héros (skin)
+var trail_color := Color(1.0, 0.8, 0.3)   ## Couleur de la traînée (skin)
 
 func _ready() -> void:
 	collision_layer = 2   # Le joueur est sur la "couche 2"
@@ -134,10 +137,10 @@ func _draw() -> void:
 		return
 
 	var c := Vector2(0, sin(_bob) * 2.0)   # léger balancement
-	draw_circle(c, RADIUS, Color(0.95, 0.85, 0.30))
-	draw_arc(c, RADIUS, 0.0, TAU, 32, Color(0.35, 0.30, 0.10), 3.0)
+	draw_circle(c, RADIUS, body_color)
+	draw_arc(c, RADIUS, 0.0, TAU, 32, rim_color, 3.0)
 	# Reflet doux
-	draw_circle(c + Vector2(-6, -8), 5.0, Color(1.0, 0.96, 0.7, 0.5))
+	draw_circle(c + Vector2(-6, -8), 5.0, body_color.lightened(0.5))
 	# Yeux (fermés pendant le clignement)
 	var eye_col := Color(0.12, 0.10, 0.15)
 	if _blink > 0.0:
