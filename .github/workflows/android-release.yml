@@ -150,6 +150,7 @@ jobs:
       - name: Publier les binaires signés (artefacts)
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 14
           name: gloomrunner-release
           path: |
             build/gloomrunner.aab

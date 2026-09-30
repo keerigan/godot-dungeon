@@ -94,6 +94,7 @@ jobs:
       - name: Publier l'artefact du run
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 7
           name: gloomrunner-apk
           path: build/${{ env.APK_NAME }}
           if-no-files-found: error
