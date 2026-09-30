@@ -1,0 +1,79 @@
+name: Clean obsolete Actions artifacts
+on:
+  push:
+    branches: ['maintenance/actions-storage-cleanup-20260930']
+    paths: ['.github/workflows/actions-storage-cleanup.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: actions-storage-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Delete reviewed old artifacts and verify preserved copies
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLEANUP_PLAN: '{"keep":[{"id":9970827485,"name":"gloomrunner-apk","size":24472081},{"id":9947711567,"name":"godot-dungeon-apk","size":24087144}],"delete":[{"id":9970743893,"name":"gloomrunner-apk","run_id":33970355504,"size":24472289},{"id":9968802888,"name":"gloomrunner-apk","run_id":33963862869,"size":24472077},{"id":9968168993,"name":"gloomrunner-apk","run_id":33961759910,"size":24470601},{"id":9965585978,"name":"gloomrunner-apk","run_id":33953412076,"size":24468263},{"id":9965495961,"name":"gloomrunner-apk","run_id":33953149886,"size":24464552},{"id":9965303113,"name":"gloomrunner-apk","run_id":33952543691,"size":24461099},{"id":9965046409,"name":"gloomrunner-apk","run_id":33951716963,"size":24454138},{"id":9965013813,"name":"gloomrunner-apk","run_id":33951597563,"size":24454129},{"id":9950115247,"name":"gloomrunner-apk","run_id":33907610919,"size":24453809},{"id":9949881691,"name":"gloomrunner-apk","run_id":33906976233,"size":24087122},{"id":9949757949,"name":"gloomrunner-apk","run_id":33906658538,"size":24087124},{"id":9949178770,"name":"gloomrunner-apk","run_id":33905128931,"size":24087144},{"id":9948731892,"name":"gloomrunner-apk","run_id":33903933111,"size":24087121},{"id":9937592541,"name":"godot-dungeon-apk","run_id":33875227003,"size":24087156},{"id":9936024836,"name":"godot-dungeon-apk","run_id":33871280615,"size":24085404},{"id":9935438091,"name":"godot-dungeon-apk","run_id":33869801927,"size":24085002},{"id":9933880051,"name":"godot-dungeon-apk","run_id":33865668129,"size":24084715},{"id":9933775368,"name":"godot-dungeon-apk","run_id":33865391433,"size":24080741},{"id":9932471998,"name":"godot-dungeon-apk","run_id":33861912014,"size":24079778},{"id":9931887440,"name":"godot-dungeon-apk","run_id":33860355418,"size":24076376},{"id":9931609086,"name":"godot-dungeon-apk","run_id":33859614360,"size":24066737},{"id":9931194790,"name":"godot-dungeon-apk","run_id":33858511590,"size":24064130},{"id":9925945364,"name":"godot-dungeon-apk","run_id":33844225141,"size":24065749},{"id":9925497094,"name":"godot-dungeon-apk","run_id":33842838844,"size":24063764},{"id":9913628987,"name":"godot-dungeon-apk","run_id":33807769531,"size":24061797},{"id":9912189206,"name":"godot-dungeon-apk","run_id":33803977469,"size":24058367},{"id":9911165825,"name":"godot-dungeon-apk","run_id":33801258844,"size":24056111},{"id":9910165568,"name":"godot-dungeon-apk","run_id":33798491337,"size":24052539},{"id":9909770752,"name":"godot-dungeon-apk","run_id":33797489546,"size":24050965},{"id":9909627614,"name":"godot-dungeon-apk","run_id":33797082180,"size":24050596},{"id":9908705885,"name":"godot-dungeon-apk","run_id":33794633993,"size":24032635}]}'
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error, time
+          repo = os.environ["GITHUB_REPOSITORY"]
+          api = os.environ["GITHUB_API_URL"]
+          plan = json.loads(os.environ["CLEANUP_PLAN"])
+          headers = {"Authorization": "Bearer " + os.environ["GH_TOKEN"], "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+          def request(path, method="GET"):
+              for attempt in range(4):
+                  try:
+                      with urllib.request.urlopen(urllib.request.Request(api + path, headers=headers, method=method), timeout=60) as response:
+                          raw = response.read()
+                          return json.loads(raw) if raw else None
+                  except urllib.error.HTTPError as error:
+                      if error.code >= 500 and attempt < 3:
+                          time.sleep(2 ** attempt)
+                          continue
+                      raise
+          def artifacts():
+              items = []
+              page = 1
+              while True:
+                  batch = request(f"/repos/{repo}/actions/artifacts?per_page=100&page={page}")["artifacts"]
+                  items.extend(batch)
+                  if len(batch) < 100:
+                      return items
+                  page += 1
+          before = artifacts()
+          index = {item["id"]: item for item in before}
+          for item in plan["keep"]:
+              assert item["id"] in index, "A preserved artifact is missing; aborting"
+          for item in plan["delete"]:
+              current = index.get(item["id"])
+              if current is not None:
+                  assert current["name"] == item["name"], "Artifact name mismatch"
+                  assert current["workflow_run"]["id"] == item["run_id"], "Artifact run mismatch"
+          deleted = []
+          for item in plan["delete"]:
+              if item["id"] not in index:
+                  continue
+              request(f"/repos/{repo}/actions/artifacts/{item['id']}", method="DELETE")
+              deleted.append(index[item["id"]])
+              print(f"Deleted artifact {item['id']}: {item['name']}", flush=True)
+          after = artifacts()
+          remaining = {item["id"] for item in after}
+          assert all(item["id"] not in remaining for item in plan["delete"]), "Some selected artifacts remain"
+          assert all(item["id"] in remaining for item in plan["keep"]), "A preserved artifact is missing"
+          result = {"repository": repo, "before_count": len(before), "after_count": len(after), "deleted_count": len(deleted), "freed_bytes": sum(item["size_in_bytes"] for item in deleted), "remaining_bytes": sum(item["size_in_bytes"] for item in after)}
+          print("CLEANUP_RESULT=" + json.dumps(result), flush=True)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("# Actions storage cleanup\n\n")
+              summary.write("Deleted only the reviewed obsolete artifact IDs. Latest successful artifacts and all release assets are preserved.\n\n")
+              summary.write("~~~json\n" + json.dumps(result, indent=2) + "\n~~~\n")
+          
+          PY
